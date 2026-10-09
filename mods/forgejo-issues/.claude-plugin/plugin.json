@@ -20,6 +20,18 @@
       "title": "Comment before closing",
       "description": "Closing an issue needs a comment, posted first and then the close, so every closed issue says why",
       "default": true
+    },
+    "requireMilestone": {
+      "type": "boolean",
+      "title": "New issues need a milestone",
+      "description": "The new-issue form refuses to file an issue until a milestone is picked",
+      "default": false
+    },
+    "requireLabelFrom": {
+      "type": "string",
+      "title": "New issues need one of these labels",
+      "description": "Comma-separated label names (for example a set of type labels); the new-issue form refuses to file until one is picked. Empty for no rule.",
+      "default": ""
     }
   }
 }

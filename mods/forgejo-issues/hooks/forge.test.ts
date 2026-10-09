@@ -120,8 +120,8 @@ describe('labels', () => {
   })
 
   test('to_labels_keeps_exclusive', async () => {
-    expect(toLabels('[{"name":"kind/bug","color":"ee0701","exclusive":true}]')).toEqual([
-      { name: 'kind/bug', color: '#ee0701', exclusive: true, description: '' },
+    expect(toLabels('[{"id":3,"name":"kind/bug","color":"ee0701","exclusive":true}]')).toEqual([
+      { id: 3, name: 'kind/bug', color: '#ee0701', exclusive: true, description: '' },
     ])
   })
 })

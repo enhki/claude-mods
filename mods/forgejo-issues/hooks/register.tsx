@@ -4,8 +4,10 @@ import type { EngineInterface as $, Register } from 'claude-code'
 import type { Data, Detail, RepoInfo, Ui } from '../types'
 import { parseRemote, pickToken, tokenKey, toComments, toIssues, toLabels, toMilestones } from './forge'
 import { touchesSecrets } from './guard'
+import { labelIds, milestoneId, newIssueProblem, parseLabelList, toggleScoped } from './triage'
+import type { TriageRules } from './triage'
 import { filterIssues } from './search'
-import { detailView, listView } from './views'
+import { detailView, listView, newIssueView } from './views'
 
 const PANE = 'forgejo-issues'
 const GUARDED = new Set(['Read', 'Write', 'Edit', 'Grep', 'Glob', 'Bash'])
@@ -29,6 +31,8 @@ const EMPTY_UI: Ui = {
   armed: null,
   busy: false,
   notice: null,
+  editingLabels: null,
+  creating: null,
 }
 const data = atom({ plugin: 'forgejo-issues', key: 'data' } as const, EMPTY_DATA)
 const ui = atom({ plugin: 'forgejo-issues', key: 'ui' } as const, EMPTY_UI)
@@ -36,6 +40,7 @@ const detail = atom({ plugin: 'forgejo-issues', key: 'detail' } as const, null a
 
 let apiUrl = ''
 let requireCommentOnClose = true
+let triageRules: TriageRules = { requireMilestone: false, requireLabelFrom: [] }
 let home = ''
 let configHome = ''
 // Held in the module, never in $.state: the token stays out of anything drawn or logged.
@@ -193,15 +198,7 @@ async function openFirst($: $): Promise<void> {
 
 async function toggleChip($: $, name: string): Promise<void> {
   const d = await read($, data)
-  const at = name.lastIndexOf('/')
-  const scope = at > 0 ? name.slice(0, at + 1) : null
-  // An exclusive scope holds one label at a time, so its chips pick one.
-  const exclusive = scope !== null && d.labels.some(l => l.exclusive && l.name.startsWith(scope))
-  await update($, ui, (u): Ui => {
-    if (u.chips.includes(name)) return { ...u, chips: u.chips.filter(c => c !== name) }
-    const kept = exclusive && scope ? u.chips.filter(c => !c.startsWith(scope)) : u.chips
-    return { ...u, chips: [...kept, name] }
-  })
+  await update($, ui, (u): Ui => ({ ...u, chips: toggleScoped(u.chips, name, d.labels) }))
 }
 
 async function notify($: $, tone: 'ok' | 'error', text: string): Promise<void> {
@@ -285,6 +282,68 @@ async function confirm($: $): Promise<void> {
   })
 }
 
+function repoPath(): string {
+  return `/repos/${auth!.repo.owner}/${auth!.repo.repo}`
+}
+
+/** Re-reads one issue after a write whose answer is not the issue itself. */
+async function refetchIssue($: $, n: number): Promise<string | null> {
+  const res = await get($, `${repoPath()}/issues/${n}`)
+  if (typeof res === 'string') return res
+  await replaceIssue($, res.text)
+  return null
+}
+
+async function saveLabels($: $): Promise<void> {
+  const [d, u] = await Promise.all([read($, data), read($, ui)])
+  const n = u.open
+  const names = u.editingLabels
+  if (n === null || names === null) return
+  await write($, async () => {
+    const res = await request($, 'PUT', `${repoPath()}/issues/${n}/labels`, { labels: labelIds(names, d.labels) })
+    if (typeof res === 'string') return notify($, 'error', res)
+    const why = await refetchIssue($, n)
+    if (why) return notify($, 'error', why)
+    await update($, ui, (x): Ui => ({ ...x, editingLabels: null }))
+    await notify($, 'ok', `Labels saved on #${n}.`)
+  })
+}
+
+async function setMilestone($: $, title: string): Promise<void> {
+  const [d, u] = await Promise.all([read($, data), read($, ui)])
+  const n = u.open
+  if (n === null) return
+  await write($, async () => {
+    const res = await request($, 'PATCH', `${repoPath()}/issues/${n}`, { milestone: milestoneId(title || null, d.milestones) })
+    if (typeof res === 'string') return notify($, 'error', res)
+    await replaceIssue($, res.text)
+    await notify($, 'ok', title ? `#${n} moved to ${title}.` : `#${n} has no milestone now.`)
+  })
+}
+
+async function createIssue($: $): Promise<void> {
+  const [d, u] = await Promise.all([read($, data), read($, ui)])
+  const draft = u.creating
+  if (!draft) return
+  const problem = newIssueProblem(draft, triageRules)
+  if (problem) return notify($, 'error', problem)
+  await write($, async () => {
+    const res = await request($, 'POST', `${repoPath()}/issues`, {
+      title: draft.title.trim(),
+      body: draft.body.trim(),
+      labels: labelIds(draft.labels, d.labels),
+      ...(draft.milestone ? { milestone: milestoneId(draft.milestone, d.milestones) } : {}),
+    })
+    if (typeof res === 'string') return notify($, 'error', res)
+    const created = toIssues(`[${res.text}]`)[0]
+    if (!created) return notify($, 'error', 'The forge answered without the new issue.')
+    await update($, data, (x): Data => ({ ...x, issues: [created, ...x.issues] }))
+    await update($, ui, (x): Ui => ({ ...x, creating: null }))
+    await openIssue($, created.number)
+    await notify($, 'ok', `Filed #${created.number}.`)
+  })
+}
+
 /** A pill's id, as pill.tsx posts it: `state:open`, `chip:<label>`, `open:<n>`, `back`, ... */
 async function press($: $, id: string): Promise<void> {
   const [kind, ...rest] = id.split(':')
@@ -309,6 +368,44 @@ async function press($: $, id: string): Promise<void> {
     await confirm($)
   } else if (kind === 'cancel') {
     await update($, ui, (x): Ui => ({ ...x, armed: null }))
+  } else if (kind === 'labels') {
+    await pressLabels($, arg)
+  } else if (kind === 'new') {
+    await pressNew($, arg)
+  }
+}
+
+/** `labels:edit`, `labels:save`, `labels:cancel`, `labels:toggle:<name>` in the detail view. */
+async function pressLabels($: $, arg: string): Promise<void> {
+  const d = await read($, data)
+  if (arg === 'edit') {
+    const u = await read($, ui)
+    const issue = d.issues.find(i => i.number === u.open)
+    if (issue) await update($, ui, (x): Ui => ({ ...x, editingLabels: issue.labels.map(l => l.name), notice: null }))
+  } else if (arg === 'save') {
+    await saveLabels($)
+  } else if (arg === 'cancel') {
+    await update($, ui, (x): Ui => ({ ...x, editingLabels: null }))
+  } else if (arg.startsWith('toggle:')) {
+    const name = arg.slice('toggle:'.length)
+    await update($, ui, (x): Ui => (x.editingLabels ? { ...x, editingLabels: toggleScoped(x.editingLabels, name, d.labels) } : x))
+  }
+}
+
+/** `new:start`, `new:create`, `new:cancel`, `new:toggle:<name>` for the new-issue form. */
+async function pressNew($: $, arg: string): Promise<void> {
+  const d = await read($, data)
+  if (arg === 'start') {
+    await update($, ui, (x): Ui => ({ ...x, open: null, notice: null, creating: { title: '', body: '', labels: [], milestone: '' } }))
+  } else if (arg === 'create') {
+    await createIssue($)
+  } else if (arg === 'cancel' || arg === 'back') {
+    await update($, ui, (x): Ui => ({ ...x, creating: null, notice: null }))
+  } else if (arg.startsWith('toggle:')) {
+    const name = arg.slice('toggle:'.length)
+    await update($, ui, (x): Ui =>
+      x.creating ? { ...x, creating: { ...x.creating, labels: toggleScoped(x.creating.labels, name, d.labels) } } : x,
+    )
   }
 }
 
@@ -321,6 +418,10 @@ async function guard($: $, tool: string, input: Record<string, unknown>): Promis
 export const register: Register = (on, options) => {
   apiUrl = typeof options?.apiUrl === 'string' ? options.apiUrl : ''
   requireCommentOnClose = options?.requireCommentOnClose !== false
+  triageRules = {
+    requireMilestone: options?.requireMilestone === true,
+    requireLabelFrom: parseLabelList(typeof options?.requireLabelFrom === 'string' ? options.requireLabelFrom : ''),
+  }
 
   on('session.start', async ($, e, next) => {
     await $.command.register({ name: 'issues', description: "Show this repo's Forgejo issues in a pane" })
@@ -359,10 +460,19 @@ export const register: Register = (on, options) => {
     // Ages count from the fetch: drawing stays a pure function of state.
     const now = d.fetchedAt
     const issue = u.open === null ? undefined : d.issues.find(i => i.number === u.open)
+    if (u.creating) {
+      return newIssueView(el, d, u, u.creating, triageRules, {
+        title: text => update($, ui, (x): Ui => (x.creating ? { ...x, creating: { ...x.creating, title: text } } : x)),
+        body: text => update($, ui, (x): Ui => (x.creating ? { ...x, creating: { ...x.creating, body: text } } : x)),
+        milestone: value => update($, ui, (x): Ui => (x.creating ? { ...x, creating: { ...x.creating, milestone: value } } : x)),
+        create: () => createIssue($),
+      })
+    }
     if (issue) {
       return detailView(el, d, issue, dt, u, now, {
         draft: text => update($, ui, (x): Ui => ({ ...x, draft: text, armed: null })),
         comment: () => comment($),
+        milestone: value => setMilestone($, value),
       })
     }
     return listView(el, d, u, now, e.surface === 'desktop', {

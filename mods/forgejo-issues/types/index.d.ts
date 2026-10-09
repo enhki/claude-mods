@@ -1,9 +1,9 @@
 export type IssueLabel = { name: string; color: string }
 
 /** A repo label; `scope/leaf` names are Forgejo's scoped labels. */
-export type Label = IssueLabel & { exclusive: boolean; description: string }
+export type Label = IssueLabel & { id: number; exclusive: boolean; description: string }
 
-export type Milestone = { title: string; open: number; closed: number }
+export type Milestone = { id: number; title: string; state: 'open' | 'closed'; open: number; closed: number }
 
 export type Issue = {
   number: number
@@ -60,7 +60,14 @@ export type Ui = {
   busy: boolean
   /** The outcome of the last write, shown in the detail view. */
   notice: { tone: 'ok' | 'error'; text: string } | null
+  /** The open issue's labels while they are being edited, or null. */
+  editingLabels: string[] | null
+  /** The new-issue form while it is open, or null. */
+  creating: NewIssue | null
 }
+
+/** A new issue being written: title, a one-line body, labels and a milestone title. */
+export type NewIssue = { title: string; body: string; labels: string[]; milestone: string }
 
 export type Detail = {
   number: number

@@ -1,10 +1,11 @@
 import type { Elements } from 'claude-code'
 
-import type { Data, Detail, Issue, Ui } from '../types'
+import type { Data, Detail, Issue, NewIssue, Ui } from '../types'
 import { ago, linkifyRefs, scopeOf } from './forge'
 import type { CardProps } from './card'
 import type { PillProps } from './pill'
 import { filterIssues, groupRows } from './search'
+import type { TriageRules } from './triage'
 
 /** The elements both drawing surfaces with a pane share. */
 export type El = Pick<Elements['desktop'], 'Box' | 'Text' | 'Button' | 'Input' | 'Select' | 'Link' | 'Markdown' | 'Client'>
@@ -17,7 +18,15 @@ export type ListActions = {
 }
 
 /** What the detail view's composer calls. */
-export type DetailActions = { draft: (text: string) => void; comment: () => void }
+export type DetailActions = { draft: (text: string) => void; comment: () => void; milestone: (title: string) => void }
+
+/** What the new-issue form's native controls call. */
+export type NewIssueActions = {
+  title: (text: string) => void
+  body: (text: string) => void
+  milestone: (title: string) => void
+  create: () => void
+}
 
 /** A pressable control: a Client posting `{ press: id }` (see pill.tsx for why not a Button). */
 function pill(el: El, props: PillProps) {
@@ -48,6 +57,7 @@ function header(el: El, data: Data, ui: Ui, shown: number) {
         )}
         {pill(el, { id: 'grouped', kind: 'button', label: 'Grouped', active: ui.grouped, border: data.border })}
         {pill(el, { id: 'refresh', kind: 'button', label: data.status === 'loading' ? 'Loading…' : 'Refresh', border: data.border })}
+        {pill(el, { id: 'new:start', kind: 'button', label: 'New issue', border: data.border })}
       </Box>
     </Box>
   )
@@ -62,7 +72,7 @@ function chips(el: El, data: Data, ui: Ui) {
     for (const l of i.labels) counts.set(l.name, (counts.get(l.name) ?? 0) + 1)
   }
   const known = new Map(data.labels.map(l => [l.name, l]))
-  for (const name of counts.keys()) if (!known.has(name)) known.set(name, { name, color: '#888888', exclusive: false, description: '' })
+  for (const name of counts.keys()) if (!known.has(name)) known.set(name, { id: -1, name, color: '#888888', exclusive: false, description: '' })
   const shown = [...known.values()].filter(l => counts.has(l.name) || ui.chips.includes(l.name))
   const scopes = new Map<string, typeof shown>()
   for (const l of shown) {
@@ -174,7 +184,7 @@ function mentions(texts: string[], data: Data, self: number): number[] {
 }
 
 export function detailView(el: El, data: Data, issue: Issue, detail: Detail | null, ui: Ui, now: number, act: DetailActions) {
-  const { Box, Text, Link, Markdown } = el
+  const { Box, Text, Link, Markdown, Select } = el
   const base = `${repoUrl(data)}/issues`
   const comments = detail?.number === issue.number ? detail : null
   const refs = mentions([issue.body, ...(comments?.comments ?? []).map(c => c.body)], data, issue.number)
@@ -198,11 +208,28 @@ export function detailView(el: El, data: Data, issue: Issue, detail: Detail | nu
             <Text dimColor>{l.name}</Text>
           </Box>
         ))}
-        {issue.milestone && <Text dimColor>⚑ {issue.milestone}</Text>}
         <Text dimColor>
           {issue.author} · updated {ago(issue.updatedAt, now)} ago
         </Text>
       </Box>
+      <Box key="triage" flexDirection="row" flexWrap="wrap" gap={1} alignItems="center">
+        <Select
+          key="issue-milestone"
+          options={milestoneOptions(data, issue.milestone)}
+          value={issue.milestone ?? ''}
+          onSelect={act.milestone}
+        />
+        {ui.editingLabels === null && pill(el, { id: 'labels:edit', kind: 'button', label: 'Edit labels', border: data.border })}
+      </Box>
+      {ui.editingLabels !== null && (
+        <Box key="label-editor" flexDirection="column" gap={1} borderStyle="round" borderColor={data.border} paddingX={1}>
+          {labelPicker(el, data, ui.editingLabels, 'labels:toggle:')}
+          <Box flexDirection="row" gap={1}>
+            {pill(el, { id: 'labels:save', kind: 'button', label: ui.busy ? 'Saving…' : 'Save labels', active: true, border: data.border })}
+            {pill(el, { id: 'labels:cancel', kind: 'button', label: 'Cancel', border: data.border })}
+          </Box>
+        </Box>
+      )}
       {refs.length > 0 && (
         <Box key="refs" flexDirection="row" flexWrap="wrap" columnGap={2}>
           <Text dimColor>Mentions</Text>
@@ -266,6 +293,65 @@ function composer(el: El, data: Data, issue: Issue, ui: Ui, act: DetailActions) 
             : pill(el, { id: 'reopen', kind: 'button', label: hasDraft ? 'Comment and reopen' : 'Reopen issue', border: b })}
         </Box>
       )}
+      {ui.notice && <Text color={ui.notice.tone === 'ok' ? 'success' : 'error'}>{ui.notice.text}</Text>}
+    </Box>
+  )
+}
+
+/** The milestone picker's options: none, then the open milestones (and the current one if closed). */
+function milestoneOptions(data: Data, current: string | null) {
+  const shown = data.milestones.filter(m => m.state === 'open' || m.title === current)
+  return [{ value: '', label: 'No milestone' }, ...shown.map(m => ({ value: m.title, label: m.title }))]
+}
+
+/** Every repo label as a toggle chip, scoped ones under their scope; each posts `<idPrefix><name>`. */
+function labelPicker(el: El, data: Data, selected: string[], idPrefix: string) {
+  const { Box, Text } = el
+  const scopes = new Map<string, typeof data.labels>()
+  for (const l of data.labels) {
+    const scope = scopeOf(l.name).scope ?? ''
+    scopes.set(scope, [...(scopes.get(scope) ?? []), l])
+  }
+  const order = [...scopes.keys()].sort((a, b) => (a === '' ? -1 : b === '' ? 1 : a.localeCompare(b)))
+  return (
+    <Box key="picker" flexDirection="column">
+      {order.map(scope => (
+        <Box key={`pk-${scope}`} flexDirection="row" flexWrap="wrap" columnGap={2}>
+          {scope && <Text dimColor>{scope}/</Text>}
+          {scopes
+            .get(scope)!
+            .sort((a, b) => a.name.localeCompare(b.name))
+            .map(l =>
+              pill(el, { id: `${idPrefix}${l.name}`, kind: 'chip', label: scopeOf(l.name).leaf, dot: l.color, active: selected.includes(l.name) }),
+            )}
+        </Box>
+      ))}
+    </Box>
+  )
+}
+
+/** The new-issue form: title, a one-line body, labels and a milestone. */
+export function newIssueView(el: El, data: Data, ui: Ui, draft: NewIssue, rules: TriageRules, act: NewIssueActions) {
+  const { Box, Text, Input, Select } = el
+  const need = [rules.requireMilestone ? 'a milestone' : '', rules.requireLabelFrom.length ? `one of ${rules.requireLabelFrom.join(', ')}` : '']
+    .filter(Boolean)
+    .join(' and ')
+  return (
+    <Box flexDirection="column" gap={1}>
+      <Box key="top" flexDirection="row" justifyContent="space-between" alignItems="center">
+        {pill(el, { id: 'new:back', kind: 'button', label: '← Issues', border: data.border })}
+        <Text bold>New issue{data.repo ? ` in ${data.repo.owner}/${data.repo.repo}` : ''}</Text>
+      </Box>
+      <Input key="new-title" placeholder="Title" value={draft.title} onInput={act.title} onSubmit={act.create} />
+      <Input key="new-body" placeholder="Description (one line here; write more on the web)" value={draft.body} onInput={act.body} onSubmit={act.create} />
+      <Text dimColor>Labels</Text>
+      {labelPicker(el, data, draft.labels, 'new:toggle:')}
+      <Select key="new-milestone" options={milestoneOptions(data, null)} value={draft.milestone} onSelect={act.milestone} />
+      {need && <Text dimColor>This repo's issues need {need}.</Text>}
+      <Box key="actions" flexDirection="row" gap={1}>
+        {pill(el, { id: 'new:create', kind: 'button', label: ui.busy ? 'Filing…' : 'Create issue', active: true, border: data.border })}
+        {pill(el, { id: 'new:cancel', kind: 'button', label: 'Cancel', border: data.border })}
+      </Box>
       {ui.notice && <Text color={ui.notice.tone === 'ok' ? 'success' : 'error'}>{ui.notice.text}</Text>}
     </Box>
   )

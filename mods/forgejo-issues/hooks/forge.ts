@@ -135,14 +135,16 @@ export function toIssues(json: string): Issue[] {
 }
 
 export function toLabels(json: string): Label[] {
-  return list<{ name: string; color: string; exclusive?: boolean; description?: string }>(json, 'label list').map(
-    l => ({ name: l.name, color: hex(l.color), exclusive: Boolean(l.exclusive), description: l.description ?? '' }),
+  return list<{ id: number; name: string; color: string; exclusive?: boolean; description?: string }>(json, 'label list').map(
+    l => ({ id: l.id, name: l.name, color: hex(l.color), exclusive: Boolean(l.exclusive), description: l.description ?? '' }),
   )
 }
 
 export function toMilestones(json: string): Milestone[] {
-  return list<{ title: string; open_issues?: number; closed_issues?: number }>(json, 'milestone list').map(m => ({
+  return list<{ id: number; title: string; state?: string; open_issues?: number; closed_issues?: number }>(json, 'milestone list').map(m => ({
+    id: m.id,
     title: m.title,
+    state: m.state === 'closed' ? 'closed' : 'open',
     open: m.open_issues ?? 0,
     closed: m.closed_issues ?? 0,
   }))

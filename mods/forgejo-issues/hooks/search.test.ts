@@ -98,8 +98,8 @@ describe('groupRows', () => {
   test('milestone_order_then_none_last', async () => {
     const rows = filterIssues(ISSUES, { ...UI, state: 'all' })
     const groups = groupRows(rows, [
-      { title: 'Networking', open: 1, closed: 0 },
-      { title: 'Theming', open: 2, closed: 0 },
+      { id: 1, title: 'Networking', state: 'open', open: 1, closed: 0 },
+      { id: 2, title: 'Theming', state: 'open', open: 2, closed: 0 },
     ])
     expect(groups.map(g => [g.title, g.rows.map(r => r.issue.number)])).toEqual([
       ['Networking', [2]],
