@@ -46,6 +46,16 @@ let configHome = ''
 // Held in the module, never in $.state: the token stays out of anything drawn or logged.
 let auth: { apiBase: string; token: string; repo: RepoInfo; source: 'secrets' | 'fgj' } | null = null
 
+// State saved by an older version of the mod lacks newer fields: fill in the
+// defaults on every read so a missing field never reaches the drawing.
+async function readUi($: $): Promise<Ui> {
+  return { ...EMPTY_UI, ...(await read($, ui)) }
+}
+
+async function readData($: $): Promise<Data> {
+  return { ...EMPTY_DATA, ...(await read($, data)) }
+}
+
 async function readOrNull($: $, path: string): Promise<string | null> {
   try {
     return await $.fs.read(path)
@@ -170,7 +180,7 @@ async function load($: $): Promise<void> {
 
 async function openIssue($: $, n: number): Promise<void> {
   await update($, ui, (u): Ui => ({ ...u, open: n, draft: '', armed: null, notice: null }))
-  const d = await read($, data)
+  const d = await readData($)
   if (!d.issues.some(i => i.number === n)) return
   await update($, detail, (): Detail => ({ number: n, status: 'loading', comments: [], message: null }))
   if (!auth) {
@@ -191,13 +201,13 @@ async function openIssue($: $, n: number): Promise<void> {
 }
 
 async function openFirst($: $): Promise<void> {
-  const [d, u] = await Promise.all([read($, data), read($, ui)])
+  const [d, u] = await Promise.all([readData($), readUi($)])
   const top = filterIssues(d.issues, u)[0]
   if (top) await openIssue($, top.issue.number)
 }
 
 async function toggleChip($: $, name: string): Promise<void> {
-  const d = await read($, data)
+  const d = await readData($)
   await update($, ui, (u): Ui => ({ ...u, chips: toggleScoped(u.chips, name, d.labels) }))
 }
 
@@ -232,7 +242,7 @@ async function postComment($: $, n: number, text: string): Promise<boolean> {
 
 /** Runs one write with the pane marked busy, so a second press waits for it. */
 async function write($: $, run: () => Promise<void>): Promise<void> {
-  const u = await read($, ui)
+  const u = await readUi($)
   if (u.busy) return
   await update($, ui, (x): Ui => ({ ...x, busy: true, notice: null }))
   try {
@@ -247,7 +257,7 @@ async function write($: $, run: () => Promise<void>): Promise<void> {
 }
 
 async function comment($: $): Promise<void> {
-  const u = await read($, ui)
+  const u = await readUi($)
   const n = u.open
   const text = u.draft.trim()
   if (n === null || !text) return
@@ -258,7 +268,7 @@ async function comment($: $): Promise<void> {
 
 /** Close or reopen: the first press arms it (and checks the comment rule), Confirm runs it. */
 async function arm($: $, action: 'close' | 'reopen'): Promise<void> {
-  const u = await read($, ui)
+  const u = await readUi($)
   if (action === 'close' && requireCommentOnClose && !u.draft.trim()) {
     return notify($, 'error', 'Write a comment first: closing posts it, then closes, so the issue says why.')
   }
@@ -266,7 +276,7 @@ async function arm($: $, action: 'close' | 'reopen'): Promise<void> {
 }
 
 async function confirm($: $): Promise<void> {
-  const u = await read($, ui)
+  const u = await readUi($)
   const n = u.open
   const action = u.armed
   if (n === null || (action !== 'close' && action !== 'reopen')) return
@@ -295,7 +305,7 @@ async function refetchIssue($: $, n: number): Promise<string | null> {
 }
 
 async function saveLabels($: $): Promise<void> {
-  const [d, u] = await Promise.all([read($, data), read($, ui)])
+  const [d, u] = await Promise.all([readData($), readUi($)])
   const n = u.open
   const names = u.editingLabels
   if (n === null || names === null) return
@@ -310,7 +320,7 @@ async function saveLabels($: $): Promise<void> {
 }
 
 async function setMilestone($: $, title: string): Promise<void> {
-  const [d, u] = await Promise.all([read($, data), read($, ui)])
+  const [d, u] = await Promise.all([readData($), readUi($)])
   const n = u.open
   if (n === null) return
   await write($, async () => {
@@ -322,7 +332,7 @@ async function setMilestone($: $, title: string): Promise<void> {
 }
 
 async function createIssue($: $): Promise<void> {
-  const [d, u] = await Promise.all([read($, data), read($, ui)])
+  const [d, u] = await Promise.all([readData($), readUi($)])
   const draft = u.creating
   if (!draft) return
   const problem = newIssueProblem(draft, triageRules)
@@ -377,9 +387,9 @@ async function press($: $, id: string): Promise<void> {
 
 /** `labels:edit`, `labels:save`, `labels:cancel`, `labels:toggle:<name>` in the detail view. */
 async function pressLabels($: $, arg: string): Promise<void> {
-  const d = await read($, data)
+  const d = await readData($)
   if (arg === 'edit') {
-    const u = await read($, ui)
+    const u = await readUi($)
     const issue = d.issues.find(i => i.number === u.open)
     if (issue) await update($, ui, (x): Ui => ({ ...x, editingLabels: issue.labels.map(l => l.name), notice: null }))
   } else if (arg === 'save') {
@@ -394,7 +404,7 @@ async function pressLabels($: $, arg: string): Promise<void> {
 
 /** `new:start`, `new:create`, `new:cancel`, `new:toggle:<name>` for the new-issue form. */
 async function pressNew($: $, arg: string): Promise<void> {
-  const d = await read($, data)
+  const d = await readData($)
   if (arg === 'start') {
     await update($, ui, (x): Ui => ({ ...x, open: null, notice: null, creating: { title: '', body: '', labels: [], milestone: '' } }))
   } else if (arg === 'create') {
@@ -456,7 +466,7 @@ export const register: Register = (on, options) => {
       return <Text>The issues pane draws in the terminal and the desktop app.</Text>
     }
     const el = $.ui.resolve(e)
-    const [d, u, dt] = await Promise.all([read($, data), read($, ui), read($, detail)])
+    const [d, u, dt] = await Promise.all([readData($), readUi($), read($, detail)])
     // Ages count from the fetch: drawing stays a pure function of state.
     const now = d.fetchedAt
     const issue = u.open === null ? undefined : d.issues.find(i => i.number === u.open)

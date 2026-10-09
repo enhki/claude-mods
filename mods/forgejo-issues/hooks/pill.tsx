@@ -25,20 +25,24 @@ type Local = { hover: boolean }
 const Pill: ClientModule<PillProps, Local> = (props, surface) => {
   const { Box, Text } = surface.elements
   const state = surface.state ?? { hover: false }
-  if (surface.state === undefined) surface.setState(state)
-
-  surface.onPointer(e => {
-    const cur = surface.state ?? state
-    if (e.type === 'leave') {
-      if (cur.hover) surface.setState({ hover: false })
-    } else if (!cur.hover) {
-      surface.setState({ hover: true })
-    }
-    if (e.type === 'down' && (e.button ?? 'left') === 'left') surface.post({ press: props.id })
-  })
-  surface.onKey(e => {
-    if (e.key === 'return' || e.key === ' ') surface.post({ press: props.id })
-  })
+  // Set once on the first draw (each set is a message to the page; see
+  // card.tsx). The id is the Client's key, so it never changes under them.
+  if (surface.state === undefined) {
+    const id = props.id
+    surface.onPointer(e => {
+      const cur = surface.state ?? { hover: false }
+      if (e.type === 'leave') {
+        if (cur.hover) surface.setState({ hover: false })
+      } else if (!cur.hover) {
+        surface.setState({ hover: true })
+      }
+      if (e.type === 'down' && (e.button ?? 'left') === 'left') surface.post({ press: id })
+    })
+    surface.onKey(e => {
+      if (e.key === 'return' || e.key === ' ') surface.post({ press: id })
+    })
+    surface.setState(state)
+  }
 
   const lit = state.hover
   const count = props.count === undefined ? null : <Text dimColor> {props.count}</Text>

@@ -183,3 +183,15 @@ test('new_issue_is_refused_untitled_then_filed_and_opened', async ($, on) => {
   expect(await ui.find({ text: 'Filed #8.' })).toBeDefined()
   expect(await ui.find({ text: /Shiny new thing/ })).toBeDefined()
 })
+
+// Listeners are set once per Client (re-setting them on every redraw floods
+// the desktop page); a click must still land after the pane redrew.
+test('card_click_still_opens_after_redraws', async ($, on) => {
+  fakeForge(on)
+  await $.command.run({ command: 'issues', args: '' } as never)
+  const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
+  await ui.post({ press: 'grouped' }, { in: 'p-grouped' })
+  await ui.post({ press: 'grouped' }, { in: 'p-grouped' })
+  await ui.pointer({ type: 'down', x: 2, y: 1, in: 'card-7' })
+  expect(await ui.find({ key: 'p-back' })).toBeDefined()
+})

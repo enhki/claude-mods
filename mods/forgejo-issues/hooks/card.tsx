@@ -43,20 +43,26 @@ function segments(text: string, start: number, hits: Set<number>): { t: string; 
 const Card: ClientModule<CardProps, Local> = (props, surface) => {
   const { Box, Text } = surface.elements
   const state = surface.state ?? { hover: false }
-  if (surface.state === undefined) surface.setState(state)
-
-  surface.onPointer(e => {
-    const cur = surface.state ?? state
-    if (e.type === 'leave') {
-      if (cur.hover) surface.setState({ hover: false })
-    } else if (!cur.hover) {
-      surface.setState({ hover: true })
-    }
-    if (e.type === 'down' && (e.button ?? 'left') === 'left') surface.post({ open: props.number })
-  })
-  surface.onKey(e => {
-    if (e.key === 'return') surface.post({ open: props.number })
-  })
+  // Listeners are set once, on the first draw: each set is a message to the
+  // page, and a list of a hundred cards re-setting them on every redraw gets
+  // its Clients unmounted for flooding it. A card's key is its issue number,
+  // so the number the listeners close over never changes.
+  if (surface.state === undefined) {
+    const number = props.number
+    surface.onPointer(e => {
+      const cur = surface.state ?? { hover: false }
+      if (e.type === 'leave') {
+        if (cur.hover) surface.setState({ hover: false })
+      } else if (!cur.hover) {
+        surface.setState({ hover: true })
+      }
+      if (e.type === 'down' && (e.button ?? 'left') === 'left') surface.post({ open: number })
+    })
+    surface.onKey(e => {
+      if (e.key === 'return') surface.post({ open: number })
+    })
+    surface.setState(state)
+  }
 
   const inner = Math.max(20, (surface.columns || 80) - FRAME_COLS)
   const numberCols = props.numberWidth + 2
