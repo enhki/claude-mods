@@ -15,13 +15,27 @@ const MAX_PAGES = 40
 
 const DARK_BORDER = '#3a3a3a'
 const LIGHT_BORDER = '#d0d0d0'
-const EMPTY_DATA: Data = { status: 'idle', repo: null, issues: [], labels: [], milestones: [], message: null, tokenSource: null, fetchedAt: 0, border: DARK_BORDER }
-const EMPTY_UI: Ui = { query: '', chips: [], milestone: '', state: 'open', grouped: true, open: null }
+const DARK_RAISED = '#232323'
+const LIGHT_RAISED = '#f4f4f4'
+const EMPTY_DATA: Data = { status: 'idle', repo: null, issues: [], labels: [], milestones: [], message: null, tokenSource: null, fetchedAt: 0, border: DARK_BORDER, raised: DARK_RAISED }
+const EMPTY_UI: Ui = {
+  query: '',
+  chips: [],
+  milestone: '',
+  state: 'open',
+  grouped: true,
+  open: null,
+  draft: '',
+  armed: null,
+  busy: false,
+  notice: null,
+}
 const data = atom({ plugin: 'forgejo-issues', key: 'data' } as const, EMPTY_DATA)
 const ui = atom({ plugin: 'forgejo-issues', key: 'ui' } as const, EMPTY_UI)
 const detail = atom({ plugin: 'forgejo-issues', key: 'detail' } as const, null as Detail | null)
 
 let apiUrl = ''
+let requireCommentOnClose = true
 let home = ''
 let configHome = ''
 // Held in the module, never in $.state: the token stays out of anything drawn or logged.
@@ -65,24 +79,43 @@ async function resolveAuth($: $): Promise<string | null> {
   return null
 }
 
-/** GETs an API path; a string is the failure, worded for the pane. */
-async function get($: $, path: string): Promise<{ text: string; total: number | null } | string> {
+/** Calls the API; a string is the failure, worded for the pane. */
+async function request(
+  $: $,
+  method: 'GET' | 'POST' | 'PATCH' | 'PUT',
+  path: string,
+  body?: unknown,
+): Promise<{ text: string; total: number | null } | string> {
   if (!auth) return 'Not connected.'
   let res
   try {
     res = await $.http.fetch(`${auth.apiBase}${path}`, {
-      headers: { Authorization: `token ${auth.token}`, Accept: 'application/json' },
+      method,
+      headers: {
+        Authorization: `token ${auth.token}`,
+        Accept: 'application/json',
+        ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
+      },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     })
   } catch (err) {
     return `Could not reach ${auth.repo.host}: ${err instanceof Error ? err.message : String(err)}`
   }
-  if (res.status === 401 || res.status === 403) {
-    return `${auth.repo.host} refused the token from ${auth.source === 'secrets' ? tokenKey(auth.repo.host) : 'fgj'} (${res.status}).`
+  const from = auth.source === 'secrets' ? tokenKey(auth.repo.host) : 'fgj'
+  if (res.status === 401) return `${auth.repo.host} refused the token from ${from} (401).`
+  if (res.status === 403) {
+    return method === 'GET'
+      ? `${auth.repo.host} refused the token from ${from} (403).`
+      : `${auth.repo.host} refused the change (403): the token from ${from} may lack write access to issues.`
   }
   if (res.status === 404) return `${auth.repo.owner}/${auth.repo.repo} is not on ${auth.repo.host}, or is not a Forgejo/Gitea repo.`
   if (!res.ok) return `${auth.repo.host} answered ${res.status}.`
   const header = Object.entries(res.headers).find(([k]) => k.toLowerCase() === 'x-total-count')?.[1]
   return { text: res.text, total: header ? Number(header) : null }
+}
+
+function get($: $, path: string) {
+  return request($, 'GET', path)
 }
 
 /** Every page of a list endpoint, parsed and joined. */
@@ -121,15 +154,17 @@ async function load($: $): Promise<void> {
     const tokenSource = auth!.source
     // The theme names light ones as such (light, light-daltonized, ...); anything else draws dark.
     const theme = String((await $.config.list()).find(row => row.key === 'theme')?.value ?? '')
-    const border = theme.includes('light') ? LIGHT_BORDER : DARK_BORDER
-    await update($, data, (d): Data => ({ ...d, status: 'ready', message: null, issues, labels, milestones, tokenSource, fetchedAt, border }))
+    const isLight = theme.includes('light')
+    const border = isLight ? LIGHT_BORDER : DARK_BORDER
+    const raised = isLight ? LIGHT_RAISED : DARK_RAISED
+    await update($, data, (d): Data => ({ ...d, status: 'ready', message: null, issues, labels, milestones, tokenSource, fetchedAt, border, raised }))
   } catch (err) {
     await fail($, `Unexpected answer from ${auth!.repo.host}: ${err instanceof Error ? err.message : String(err)}`)
   }
 }
 
 async function openIssue($: $, n: number): Promise<void> {
-  await update($, ui, (u): Ui => ({ ...u, open: n }))
+  await update($, ui, (u): Ui => ({ ...u, open: n, draft: '', armed: null, notice: null }))
   const d = await read($, data)
   if (!d.issues.some(i => i.number === n)) return
   await update($, detail, (): Detail => ({ number: n, status: 'loading', comments: [], message: null }))
@@ -169,6 +204,87 @@ async function toggleChip($: $, name: string): Promise<void> {
   })
 }
 
+async function notify($: $, tone: 'ok' | 'error', text: string): Promise<void> {
+  await update($, ui, (u): Ui => ({ ...u, notice: { tone, text }, armed: null }))
+}
+
+/** Swaps in the issue the API answered for a write, so the list and the detail view agree. */
+async function replaceIssue($: $, json: string): Promise<void> {
+  const fresh = toIssues(`[${json}]`)[0]
+  if (fresh) await update($, data, (d): Data => ({ ...d, issues: d.issues.map(i => (i.number === fresh.number ? fresh : i)) }))
+}
+
+/** Posts the draft as a comment on issue `n`; false when it did not land. */
+async function postComment($: $, n: number, text: string): Promise<boolean> {
+  const res = await request($, 'POST', `/repos/${auth!.repo.owner}/${auth!.repo.repo}/issues/${n}/comments`, { body: text })
+  if (typeof res === 'string') {
+    await notify($, 'error', res)
+    return false
+  }
+  const posted = toComments(`[${res.text}]`)
+  await update($, detail, (cur): Detail | null =>
+    cur?.number === n ? { ...cur, comments: [...cur.comments, ...posted] } : cur,
+  )
+  await update($, data, (d): Data => ({
+    ...d,
+    issues: d.issues.map(i => (i.number === n ? { ...i, comments: i.comments + 1 } : i)),
+  }))
+  await update($, ui, (u): Ui => ({ ...u, draft: '' }))
+  return true
+}
+
+/** Runs one write with the pane marked busy, so a second press waits for it. */
+async function write($: $, run: () => Promise<void>): Promise<void> {
+  const u = await read($, ui)
+  if (u.busy) return
+  await update($, ui, (x): Ui => ({ ...x, busy: true, notice: null }))
+  try {
+    if (!auth) {
+      const why = await resolveAuth($)
+      if (why) return notify($, 'error', why)
+    }
+    await run()
+  } finally {
+    await update($, ui, (x): Ui => ({ ...x, busy: false }))
+  }
+}
+
+async function comment($: $): Promise<void> {
+  const u = await read($, ui)
+  const n = u.open
+  const text = u.draft.trim()
+  if (n === null || !text) return
+  await write($, async () => {
+    if (await postComment($, n, text)) await notify($, 'ok', `Commented on #${n}.`)
+  })
+}
+
+/** Close or reopen: the first press arms it (and checks the comment rule), Confirm runs it. */
+async function arm($: $, action: 'close' | 'reopen'): Promise<void> {
+  const u = await read($, ui)
+  if (action === 'close' && requireCommentOnClose && !u.draft.trim()) {
+    return notify($, 'error', 'Write a comment first: closing posts it, then closes, so the issue says why.')
+  }
+  await update($, ui, (x): Ui => ({ ...x, armed: action, notice: null }))
+}
+
+async function confirm($: $): Promise<void> {
+  const u = await read($, ui)
+  const n = u.open
+  const action = u.armed
+  if (n === null || (action !== 'close' && action !== 'reopen')) return
+  const text = u.draft.trim()
+  await write($, async () => {
+    if (text && !(await postComment($, n, text))) return
+    const res = await request($, 'PATCH', `/repos/${auth!.repo.owner}/${auth!.repo.repo}/issues/${n}`, {
+      state: action === 'close' ? 'closed' : 'open',
+    })
+    if (typeof res === 'string') return notify($, 'error', res)
+    await replaceIssue($, res.text)
+    await notify($, 'ok', `${action === 'close' ? 'Closed' : 'Reopened'} #${n}${text ? ' with a comment' : ''}.`)
+  })
+}
+
 /** A pill's id, as pill.tsx posts it: `state:open`, `chip:<label>`, `open:<n>`, `back`, ... */
 async function press($: $, id: string): Promise<void> {
   const [kind, ...rest] = id.split(':')
@@ -185,6 +301,14 @@ async function press($: $, id: string): Promise<void> {
     await update($, ui, (x): Ui => ({ ...x, open: null }))
   } else if (kind === 'open' && /^\d+$/.test(arg)) {
     await openIssue($, Number(arg))
+  } else if (kind === 'comment') {
+    await comment($)
+  } else if (kind === 'close' || kind === 'reopen') {
+    await arm($, kind)
+  } else if (kind === 'confirm') {
+    await confirm($)
+  } else if (kind === 'cancel') {
+    await update($, ui, (x): Ui => ({ ...x, armed: null }))
   }
 }
 
@@ -196,6 +320,7 @@ async function guard($: $, tool: string, input: Record<string, unknown>): Promis
 
 export const register: Register = (on, options) => {
   apiUrl = typeof options?.apiUrl === 'string' ? options.apiUrl : ''
+  requireCommentOnClose = options?.requireCommentOnClose !== false
 
   on('session.start', async ($, e, next) => {
     await $.command.register({ name: 'issues', description: "Show this repo's Forgejo issues in a pane" })
@@ -234,7 +359,12 @@ export const register: Register = (on, options) => {
     // Ages count from the fetch: drawing stays a pure function of state.
     const now = d.fetchedAt
     const issue = u.open === null ? undefined : d.issues.find(i => i.number === u.open)
-    if (issue) return detailView(el, d, issue, dt, now)
+    if (issue) {
+      return detailView(el, d, issue, dt, u, now, {
+        draft: text => update($, ui, (x): Ui => ({ ...x, draft: text, armed: null })),
+        comment: () => comment($),
+      })
+    }
     return listView(el, d, u, now, e.surface === 'desktop', {
       query: text => update($, ui, (x): Ui => ({ ...x, query: text })),
       openFirst: () => openFirst($),

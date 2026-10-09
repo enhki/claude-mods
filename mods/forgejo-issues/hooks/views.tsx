@@ -16,6 +16,9 @@ export type ListActions = {
   milestone: (value: string) => void
 }
 
+/** What the detail view's composer calls. */
+export type DetailActions = { draft: (text: string) => void; comment: () => void }
+
 /** A pressable control: a Client posting `{ press: id }` (see pill.tsx for why not a Button). */
 function pill(el: El, props: PillProps) {
   const { Client } = el
@@ -170,7 +173,7 @@ function mentions(texts: string[], data: Data, self: number): number[] {
   return seen
 }
 
-export function detailView(el: El, data: Data, issue: Issue, detail: Detail | null, now: number) {
+export function detailView(el: El, data: Data, issue: Issue, detail: Detail | null, ui: Ui, now: number, act: DetailActions) {
   const { Box, Text, Link, Markdown } = el
   const base = `${repoUrl(data)}/issues`
   const comments = detail?.number === issue.number ? detail : null
@@ -206,14 +209,25 @@ export function detailView(el: El, data: Data, issue: Issue, detail: Detail | nu
           {refs.map(n => pill(el, { id: `open:${n}`, kind: 'chip', label: `#${n} ${titleOf(n).slice(0, 40)}${titleOf(n).length > 40 ? '…' : ''}` }))}
         </Box>
       )}
-      <Markdown key="body" text={linkifyRefs(issue.body.trim() || '_No description._', base)} />
-      <Text key="c-head" dimColor>
-        {issue.comments === 1 ? '1 comment' : `${issue.comments} comments`}
-      </Text>
+      {/* The issue itself on a raised panel, so it reads apart from the thread below. */}
+      <Box
+        key="body"
+        flexDirection="column"
+        borderStyle="round"
+        borderColor={data.border}
+        backgroundColor={data.raised}
+        paddingX={2}
+        paddingY={1}
+      >
+        <Markdown key="body-md" text={linkifyRefs(issue.body.trim() || '_No description._', base)} />
+      </Box>
+      <Box key="c-head" flexDirection="row" marginTop={1}>
+        <Text bold>{issue.comments === 1 ? '1 comment' : `${issue.comments} comments`}</Text>
+      </Box>
       {comments?.status === 'loading' && <Text dimColor>Loading comments…</Text>}
       {comments?.message && <Text color="error">{comments.message}</Text>}
       {(comments?.comments ?? []).map((c, i) => (
-        <Box key={`cm${i}`} flexDirection="column">
+        <Box key={`cm${i}`} flexDirection="column" borderStyle="round" borderColor={data.border} paddingX={1}>
           <Box flexDirection="row">
             <Text bold>{c.author}</Text>
             <Text dimColor> · {ago(c.createdAt, now)} ago</Text>
@@ -221,6 +235,38 @@ export function detailView(el: El, data: Data, issue: Issue, detail: Detail | nu
           <Markdown key={`cb${i}`} text={linkifyRefs(c.body, base)} />
         </Box>
       ))}
+      {composer(el, data, issue, ui, act)}
+    </Box>
+  )
+}
+
+/** The comment field and the write actions: comment, then close or reopen behind a Confirm. */
+function composer(el: El, data: Data, issue: Issue, ui: Ui, act: DetailActions) {
+  const { Box, Text, Input } = el
+  const hasDraft = ui.draft.trim().length > 0
+  const isOpen = issue.state === 'open'
+  const closeLabel = hasDraft ? 'Comment and close' : 'Close issue'
+  const b = data.border
+  return (
+    <Box key="composer" flexDirection="column" gap={1} marginTop={1}>
+      <Input key="draft" placeholder="Leave a comment · Enter posts it" value={ui.draft} onInput={act.draft} onSubmit={act.comment} />
+      {ui.armed ? (
+        <Box key="confirm" flexDirection="row" gap={1} alignItems="center" flexWrap="wrap">
+          <Text>
+            {ui.armed === 'close' ? `Close #${issue.number}${hasDraft ? ' with this comment' : ''}?` : `Reopen #${issue.number}${hasDraft ? ' with this comment' : ''}?`}
+          </Text>
+          {pill(el, { id: 'confirm', kind: 'button', label: ui.busy ? 'Working…' : 'Confirm', active: true, border: b })}
+          {pill(el, { id: 'cancel', kind: 'button', label: 'Cancel', border: b })}
+        </Box>
+      ) : (
+        <Box key="actions" flexDirection="row" gap={1} flexWrap="wrap">
+          {pill(el, { id: 'comment', kind: 'button', label: ui.busy ? 'Working…' : 'Comment', border: b })}
+          {isOpen
+            ? pill(el, { id: 'close', kind: 'button', label: closeLabel, border: b })
+            : pill(el, { id: 'reopen', kind: 'button', label: hasDraft ? 'Comment and reopen' : 'Reopen issue', border: b })}
+        </Box>
+      )}
+      {ui.notice && <Text color={ui.notice.tone === 'ok' ? 'success' : 'error'}>{ui.notice.text}</Text>}
     </Box>
   )
 }

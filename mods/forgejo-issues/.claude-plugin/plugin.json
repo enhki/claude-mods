@@ -2,7 +2,9 @@
   "name": "forgejo-issues",
   "version": "0.1.0",
   "description": "Browse the current repo's Forgejo or Gitea issues in a pane",
-  "author": { "name": "enhki" },
+  "author": {
+    "name": "enhki"
+  },
   "repository": "https://github.com/enhki/claude-mods",
   "license": "MIT",
   "types": "./types/index.d.ts",
@@ -13,11 +15,11 @@
       "description": "Base of the Forgejo API when it is not https://<remote host>/api/v1, for a remote whose SSH host differs from its web host. Leave empty to derive it from the git remote.",
       "default": ""
     },
-    "pageSize": {
-      "type": "number",
-      "title": "Issues per page",
-      "description": "How many issues one request lists (Forgejo caps it at 50 by default)",
-      "default": 50
+    "requireCommentOnClose": {
+      "type": "boolean",
+      "title": "Comment before closing",
+      "description": "Closing an issue needs a comment, posted first and then the close, so every closed issue says why",
+      "default": true
     }
   }
 }

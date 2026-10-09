@@ -35,6 +35,8 @@ export type Data = {
   fetchedAt: number
   /** The border colour for cards and controls at rest, from the theme setting. */
   border: string
+  /** A background a shade off the pane's, for the issue body. */
+  raised: string
 }
 
 export type StateFilter = 'open' | 'closed' | 'all'
@@ -50,6 +52,14 @@ export type Ui = {
   grouped: boolean
   /** The issue shown in the detail view, or null for the list. */
   open: number | null
+  /** The comment being written on the open issue. */
+  draft: string
+  /** A write waiting for its Confirm press (`close`, `reopen`), or null. */
+  armed: string | null
+  /** True while a write is in flight, so a second press waits. */
+  busy: boolean
+  /** The outcome of the last write, shown in the detail view. */
+  notice: { tone: 'ok' | 'error'; text: string } | null
 }
 
 export type Detail = {
