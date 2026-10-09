@@ -9,6 +9,11 @@
       "name": "statusline-desktop",
       "source": "./mods/statusline-desktop",
       "description": "Your terminal status line, drawn above the prompt in the Claude desktop app"
+    },
+    {
+      "name": "forgejo-issues",
+      "source": "./mods/forgejo-issues",
+      "description": "Browse and search the current repo's Forgejo or Gitea issues in a pane"
     }
   ]
 }
