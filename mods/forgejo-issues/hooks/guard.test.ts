@@ -29,4 +29,19 @@ describe('touchesSecrets', () => {
     expect(t('Edit', { file_path: '/h/repos/x/secrets.ts' })).toBe(false)
     expect(t('WebFetch', { url: 'https://example.com' })).toBe(false)
   })
+
+  test('text_written_through_a_heredoc_is_not_a_read', async () => {
+    const commit = "git commit -F - <<'EOF'\nfeat: token in ~/.config/claude-mods/secrets/forgejo.env\nEOF\ngit log -1"
+    expect(t('Bash', { command: commit })).toBe(false)
+    const script = 'python3 - <<EOF\nopen("t.ts").write("/claude-mods/secrets/forgejo.env")\nEOF'
+    expect(t('Bash', { command: script })).toBe(false)
+  })
+
+  test('a_read_after_a_heredoc_still_counts', async () => {
+    expect(t('Bash', { command: "cat <<'EOF'\nhi\nEOF\ncat ~/.config/claude-mods/secrets/forgejo.env" })).toBe(true)
+  })
+
+  test('a_path_merely_ending_in_the_name_elsewhere_passes', async () => {
+    expect(t('Bash', { command: 'ls repos/x/claude-mods/secrets-docs' })).toBe(false)
+  })
 })
