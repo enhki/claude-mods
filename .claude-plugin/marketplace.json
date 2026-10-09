@@ -1,0 +1,14 @@
+{
+  "name": "claude-mods",
+  "description": "Small Claude Code mods for the terminal and the desktop app",
+  "owner": {
+    "name": "enhki"
+  },
+  "plugins": [
+    {
+      "name": "statusline-desktop",
+      "source": "./mods/statusline-desktop",
+      "description": "Your terminal status line, drawn above the prompt in the Claude desktop app"
+    }
+  ]
+}
