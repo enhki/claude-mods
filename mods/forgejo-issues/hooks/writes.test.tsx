@@ -99,7 +99,7 @@ test('close_needs_a_comment_then_a_confirm_and_posts_it_first', async ($, on) =>
   expect(writes(calls)).toEqual([])
 
   // With a comment: the first press only arms it.
-  await ui.input({ key: 'draft', text: 'Fixed in abc123', kind: 'change' })
+  await ui.post({ edit: 'comment', text: 'Fixed in abc123' }, { in: 'ed-comment' })
   await ui.post({ press: 'close' }, { in: 'p-close' })
   expect(await ui.find({ text: /Close #7 with this comment\?/ })).toBeDefined()
   expect(writes(calls)).toEqual([])
@@ -117,20 +117,20 @@ test('cancel_sends_nothing', async ($, on) => {
   await $.command.run({ command: 'issues', args: '' } as never)
   const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
   await ui.post({ open: 7 }, { in: 'card-7' })
-  await ui.input({ key: 'draft', text: 'never mind', kind: 'change' })
+  await ui.post({ edit: 'comment', text: 'never mind' }, { in: 'ed-comment' })
   await ui.post({ press: 'close' }, { in: 'p-close' })
   await ui.post({ press: 'cancel' }, { in: 'p-cancel' })
   expect(writes(calls)).toEqual([])
   expect(await ui.find({ key: 'p-close' })).toBeDefined()
 })
 
-test('enter_in_the_composer_posts_a_comment', async ($, on) => {
+test('ctrl_enter_in_the_composer_posts_a_comment', async ($, on) => {
   const calls = fakeForge(on)
   await $.command.run({ command: 'issues', args: '' } as never)
   const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
   await ui.post({ open: 7 }, { in: 'card-7' })
-  await ui.input({ key: 'draft', text: 'A note', kind: 'change' })
-  await ui.input({ key: 'draft', text: 'A note', kind: 'submit' })
+  await ui.post({ edit: 'comment', text: 'A note' }, { in: 'ed-comment' })
+  await ui.post({ submit: 'comment' }, { in: 'ed-comment' })
   expect(writes(calls)).toEqual(['POST /repos/me/r/issues/7/comments'])
   expect(await ui.find({ text: 'Commented on #7.' })).toBeDefined()
 })
@@ -174,7 +174,7 @@ test('new_issue_is_refused_untitled_then_filed_and_opened', async ($, on) => {
   expect(await ui.find({ text: 'Give the issue a title.' })).toBeDefined()
   expect(writes(calls)).toEqual([])
 
-  await ui.input({ key: 'new-title', text: 'Shiny new thing', kind: 'change' })
+  await ui.post({ edit: 'new-title', text: 'Shiny new thing' }, { in: 'ed-new-title' })
   await ui.post({ press: 'new:toggle:bug' }, { in: 'p-new:toggle:bug' })
   await ui.select({ key: 'new-milestone', value: 'Theming' })
   await ui.post({ press: 'new:create' }, { in: 'p-new:create' })
@@ -194,4 +194,22 @@ test('card_click_still_opens_after_redraws', async ($, on) => {
   await ui.post({ press: 'grouped' }, { in: 'p-grouped' })
   await ui.pointer({ type: 'down', x: 2, y: 1, in: 'card-7' })
   expect(await ui.find({ key: 'p-back' })).toBeDefined()
+})
+
+// The editor Client itself: keys typed into it reach the hooks module on its
+// flush timer, and the toolbar's formats land at the caret.
+test('typed_keys_flush_and_post_with_formatting', async ($, on) => {
+  const calls = fakeForge(on)
+  await $.command.run({ command: 'issues', args: '' } as never)
+  const ui = await $.ui.mount({ ...pane, surface: 'desktop' })
+  await ui.post({ open: 7 }, { in: 'card-7' })
+  for (const k of ['H', 'i', 'space']) await ui.key({ key: k, in: 'ed-comment' })
+  await ui.post({ press: 'fmt:comment:bold' }, { in: 'p-fmt:comment:bold' })
+  for (const k of ['o', 'k', 'end']) await ui.key({ key: k, in: 'ed-comment' })
+  await ui.key({ key: 'return', in: 'ed-comment' })
+  await ui.key({ key: 'x', in: 'ed-comment' })
+  await ui.advance(500)
+  await ui.key({ key: 'return', ctrl: true, in: 'ed-comment' })
+  expect(writes(calls)).toEqual(['POST /repos/me/r/issues/7/comments'])
+  expect(calls.find(c => c.method === 'POST')?.body).toEqual({ body: 'Hi **ok**\nx' })
 })

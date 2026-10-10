@@ -1,10 +1,11 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface as $, Register } from 'claude-code'
 
-import type { Data, Detail, RepoInfo, Ui } from '../types'
+import type { Data, Detail, Format, RepoInfo, Ui } from '../types'
 import { parseRemote, pickToken, tokenKey, toComments, toIssues, toLabels, toMilestones } from './forge'
 import { touchesSecrets } from './guard'
 import { labelIds, milestoneId, newIssueProblem, parseLabelList, toggleScoped } from './triage'
+import { editorArgv } from './editing'
 import type { TriageRules } from './triage'
 import { filterIssues } from './search'
 import { detailView, listView, newIssueView } from './views'
@@ -33,6 +34,10 @@ const EMPTY_UI: Ui = {
   notice: null,
   editingLabels: null,
   creating: null,
+  sync: {},
+  fmt: {},
+  preview: {},
+  external: null,
 }
 const data = atom({ plugin: 'forgejo-issues', key: 'data' } as const, EMPTY_DATA)
 const ui = atom({ plugin: 'forgejo-issues', key: 'ui' } as const, EMPTY_UI)
@@ -41,6 +46,7 @@ const detail = atom({ plugin: 'forgejo-issues', key: 'detail' } as const, null a
 let apiUrl = ''
 let requireCommentOnClose = true
 let triageRules: TriageRules = { requireMilestone: false, requireLabelFrom: [] }
+let editorCommand = ''
 let home = ''
 let configHome = ''
 // Held in the module, never in $.state: the token stays out of anything drawn or logged.
@@ -179,7 +185,7 @@ async function load($: $): Promise<void> {
 }
 
 async function openIssue($: $, n: number): Promise<void> {
-  await update($, ui, (u): Ui => ({ ...u, open: n, draft: '', armed: null, notice: null }))
+  await update($, ui, (u): Ui => bump({ ...u, open: n, draft: '', armed: null, notice: null }, 'comment'))
   const d = await readData($)
   if (!d.issues.some(i => i.number === n)) return
   await update($, detail, (): Detail => ({ number: n, status: 'loading', comments: [], message: null }))
@@ -236,7 +242,7 @@ async function postComment($: $, n: number, text: string): Promise<boolean> {
     ...d,
     issues: d.issues.map(i => (i.number === n ? { ...i, comments: i.comments + 1 } : i)),
   }))
-  await update($, ui, (u): Ui => ({ ...u, draft: '' }))
+  await update($, ui, (u): Ui => bump({ ...u, draft: '' }, 'comment'))
   return true
 }
 
@@ -354,6 +360,75 @@ async function createIssue($: $): Promise<void> {
   })
 }
 
+/** The text behind an editor id: the comment draft, or a field of the new-issue form. */
+function getField(u: Ui, id: string): string {
+  if (id === 'comment') return u.draft
+  if (id === 'new-title') return u.creating?.title ?? ''
+  if (id === 'new-body') return u.creating?.body ?? ''
+  return ''
+}
+
+function setField(u: Ui, id: string, text: string): Ui {
+  if (id === 'comment') return { ...u, draft: text, armed: null }
+  if (id === 'new-title' && u.creating) return { ...u, creating: { ...u.creating, title: text } }
+  if (id === 'new-body' && u.creating) return { ...u, creating: { ...u.creating, body: text } }
+  return u
+}
+
+/** Marks an editor's text as replaced from here, so the editor adopts it. */
+function bump(u: Ui, id: string): Ui {
+  return { ...u, sync: { ...u.sync, [id]: (u.sync[id] ?? 0) + 1 } }
+}
+
+function isFormat(f: string | undefined): f is Format {
+  return f === 'bold' || f === 'italic' || f === 'code' || f === 'link' || f === 'heading' || f === 'list' || f === 'quote'
+}
+
+/**
+ * Hands an editor's text to the external editor: writes it to a file, runs
+ * the configured command, and takes the file back when the command exits. A
+ * command that returns at once (a launcher that forks) leaves the session
+ * open; the "Use editor text" pill takes the file back by hand.
+ */
+async function openExternal($: $, id: string): Promise<void> {
+  if (!editorCommand) return notify($, 'error', 'Set the External editor command in the mod settings first.')
+  const u = await readUi($)
+  const dir = (await $.env.get('XDG_RUNTIME_DIR')) || '/tmp'
+  const file = `${dir}/claude-mods-forgejo-${id}.md`
+  await $.fs.write(file, getField(u, id))
+  await update($, ui, (x): Ui => ({ ...x, external: { id, file }, notice: { tone: 'ok', text: 'Editing in your editor: save and quit to bring the text back.' } }))
+  const started = await $.clock.now()
+  try {
+    const stream = $.process.spawn({ argv: editorArgv(editorCommand, file) })
+    for await (const _ of stream) {
+      // The editor's own output is not used; reading it keeps the process ours.
+    }
+    const done = await stream.result
+    if (done.code !== 0 && done.code !== null) return notify($, 'error', `The editor command exited with ${done.code}.`)
+  } catch (err) {
+    return notify($, 'error', `Could not start the editor: ${err instanceof Error ? err.message : String(err)}`)
+  }
+  if ((await $.clock.now()) - started < 1500) {
+    return notify($, 'ok', 'The editor command returned straight away. When you are done, press Use editor text.')
+  }
+  await pullExternal($)
+}
+
+async function pullExternal($: $): Promise<void> {
+  const u = await readUi($)
+  if (!u.external) return
+  const { id, file } = u.external
+  let text: string
+  try {
+    text = await $.fs.read(file)
+  } catch {
+    return notify($, 'error', 'The editor file is gone; nothing to bring back.')
+  }
+  await update($, ui, (x): Ui => bump({ ...setField(x, id, text.replace(/\n$/, '')), external: null }, id))
+  await $.process.run(['rm', '-f', file])
+  await notify($, 'ok', 'Brought the text back from your editor.')
+}
+
 /** A pill's id, as pill.tsx posts it: `state:open`, `chip:<label>`, `open:<n>`, `back`, ... */
 async function press($: $, id: string): Promise<void> {
   const [kind, ...rest] = id.split(':')
@@ -382,6 +457,18 @@ async function press($: $, id: string): Promise<void> {
     await pressLabels($, arg)
   } else if (kind === 'new') {
     await pressNew($, arg)
+  } else if (kind === 'fmt') {
+    const [id, format] = arg.split(':')
+    if (id && isFormat(format)) {
+      await update($, ui, (x): Ui => ({ ...x, fmt: { ...x.fmt, [id]: { seq: (x.fmt[id]?.seq ?? 0) + 1, format } } }))
+    }
+  } else if (kind === 'preview') {
+    await update($, ui, (x): Ui => ({ ...x, preview: { ...x.preview, [arg]: !x.preview[arg] } }))
+  } else if (kind === 'editor') {
+    // Not awaited: an editing session outlasts any hook's time budget.
+    void openExternal($, arg)
+  } else if (kind === 'editor-pull') {
+    await pullExternal($)
   }
 }
 
@@ -406,7 +493,9 @@ async function pressLabels($: $, arg: string): Promise<void> {
 async function pressNew($: $, arg: string): Promise<void> {
   const d = await readData($)
   if (arg === 'start') {
-    await update($, ui, (x): Ui => ({ ...x, open: null, notice: null, creating: { title: '', body: '', labels: [], milestone: '' } }))
+    await update($, ui, (x): Ui =>
+      bump(bump({ ...x, open: null, notice: null, creating: { title: '', body: '', labels: [], milestone: '' } }, 'new-title'), 'new-body'),
+    )
   } else if (arg === 'create') {
     await createIssue($)
   } else if (arg === 'cancel' || arg === 'back') {
@@ -428,6 +517,7 @@ async function guard($: $, tool: string, input: Record<string, unknown>): Promis
 export const register: Register = (on, options) => {
   apiUrl = typeof options?.apiUrl === 'string' ? options.apiUrl : ''
   requireCommentOnClose = options?.requireCommentOnClose !== false
+  editorCommand = typeof options?.editorCommand === 'string' ? options.editorCommand.trim() : ''
   triageRules = {
     requireMilestone: options?.requireMilestone === true,
     requireLabelFrom: parseLabelList(typeof options?.requireLabelFrom === 'string' ? options.requireLabelFrom : ''),
@@ -454,7 +544,14 @@ export const register: Register = (on, options) => {
 
   // Every pressable control is a Client (cards, pills) posting a message.
   on('ui.message', { component: 'Pane', requestId: PANE }, async ($, e) => {
-    const msg = e.data as { open?: unknown; press?: unknown } | null
+    const msg = e.data as { open?: unknown; press?: unknown; edit?: unknown; text?: unknown; submit?: unknown } | null
+    if (typeof msg?.edit === 'string' && typeof msg.text === 'string') {
+      const id = msg.edit
+      const text = msg.text
+      await update($, ui, (x): Ui => setField(x, id, text))
+    }
+    if (msg?.submit === 'comment') await comment($)
+    if (msg?.submit === 'new-title' || msg?.submit === 'new-body') await createIssue($)
     if (typeof msg?.open === 'number') await openIssue($, msg.open)
     if (typeof msg?.press === 'string') await press($, msg.press)
     return {}
@@ -471,17 +568,12 @@ export const register: Register = (on, options) => {
     const now = d.fetchedAt
     const issue = u.open === null ? undefined : d.issues.find(i => i.number === u.open)
     if (u.creating) {
-      return newIssueView(el, d, u, u.creating, triageRules, {
-        title: text => update($, ui, (x): Ui => (x.creating ? { ...x, creating: { ...x.creating, title: text } } : x)),
-        body: text => update($, ui, (x): Ui => (x.creating ? { ...x, creating: { ...x.creating, body: text } } : x)),
+      return newIssueView(el, d, u, u.creating, triageRules, editorCommand !== '', {
         milestone: value => update($, ui, (x): Ui => (x.creating ? { ...x, creating: { ...x.creating, milestone: value } } : x)),
-        create: () => createIssue($),
       })
     }
     if (issue) {
-      return detailView(el, d, issue, dt, u, now, {
-        draft: text => update($, ui, (x): Ui => ({ ...x, draft: text, armed: null })),
-        comment: () => comment($),
+      return detailView(el, d, issue, dt, u, now, editorCommand !== '', {
         milestone: value => setMilestone($, value),
       })
     }

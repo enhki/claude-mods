@@ -1,3 +1,6 @@
+/** A Markdown mark the editor toolbar inserts at the caret. */
+export type Format = 'bold' | 'italic' | 'code' | 'link' | 'heading' | 'list' | 'quote'
+
 export type IssueLabel = { name: string; color: string }
 
 /** A repo label; `scope/leaf` names are Forgejo's scoped labels. */
@@ -64,6 +67,14 @@ export type Ui = {
   editingLabels: string[] | null
   /** The new-issue form while it is open, or null. */
   creating: NewIssue | null
+  /** Per editor id: bumped when the text is replaced from here, so the editor adopts it. */
+  sync: Record<string, number>
+  /** Per editor id: the last toolbar format, run once per seq. */
+  fmt: Record<string, { seq: number; format: Format }>
+  /** Per editor id: showing the rendered Markdown instead of the text. */
+  preview: Record<string, boolean>
+  /** The editor whose text is out in the external editor, and its file. */
+  external: { id: string; file: string } | null
 }
 
 /** A new issue being written: title, a one-line body, labels and a milestone title. */

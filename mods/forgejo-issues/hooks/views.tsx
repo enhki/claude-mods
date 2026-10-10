@@ -6,6 +6,8 @@ import type { CardProps } from './card'
 import type { PillProps } from './pill'
 import { filterIssues, groupRows } from './search'
 import type { TriageRules } from './triage'
+import type { EditorProps } from './editor'
+import type { Format } from '../types'
 
 /** The elements both drawing surfaces with a pane share. */
 export type El = Pick<Elements['desktop'], 'Box' | 'Text' | 'Button' | 'Input' | 'Select' | 'Link' | 'Markdown' | 'Client'>
@@ -18,15 +20,10 @@ export type ListActions = {
 }
 
 /** What the detail view's composer calls. */
-export type DetailActions = { draft: (text: string) => void; comment: () => void; milestone: (title: string) => void }
+export type DetailActions = { milestone: (title: string) => void }
 
 /** What the new-issue form's native controls call. */
-export type NewIssueActions = {
-  title: (text: string) => void
-  body: (text: string) => void
-  milestone: (title: string) => void
-  create: () => void
-}
+export type NewIssueActions = { milestone: (title: string) => void }
 
 /** A pressable control: a Client posting `{ press: id }` (see pill.tsx for why not a Button). */
 function pill(el: El, props: PillProps) {
@@ -183,7 +180,7 @@ function mentions(texts: string[], data: Data, self: number): number[] {
   return seen
 }
 
-export function detailView(el: El, data: Data, issue: Issue, detail: Detail | null, ui: Ui, now: number, act: DetailActions) {
+export function detailView(el: El, data: Data, issue: Issue, detail: Detail | null, ui: Ui, now: number, hasEditor: boolean, act: DetailActions) {
   const { Box, Text, Link, Markdown, Select } = el
   const base = `${repoUrl(data)}/issues`
   const comments = detail?.number === issue.number ? detail : null
@@ -262,13 +259,13 @@ export function detailView(el: El, data: Data, issue: Issue, detail: Detail | nu
           <Markdown key={`cb${i}`} text={linkifyRefs(c.body, base)} />
         </Box>
       ))}
-      {composer(el, data, issue, ui, act)}
+      {composer(el, data, issue, ui, hasEditor)}
     </Box>
   )
 }
 
 /** The comment field and the write actions: comment, then close or reopen behind a Confirm. */
-function composer(el: El, data: Data, issue: Issue, ui: Ui, act: DetailActions) {
+function composer(el: El, data: Data, issue: Issue, ui: Ui, hasEditor: boolean) {
   const { Box, Text, Input } = el
   const hasDraft = ui.draft.trim().length > 0
   const isOpen = issue.state === 'open'
@@ -276,7 +273,8 @@ function composer(el: El, data: Data, issue: Issue, ui: Ui, act: DetailActions) 
   const b = data.border
   return (
     <Box key="composer" flexDirection="column" gap={1} marginTop={1}>
-      <Input key="draft" placeholder="Leave a comment · Enter posts it" value={ui.draft} onInput={act.draft} onSubmit={act.comment} />
+      {editor(el, data, ui, 'comment', 'Leave a comment · Ctrl+Enter posts it', true, 3)}
+      {editorTools(el, data, ui, 'comment', hasEditor)}
       {ui.armed ? (
         <Box key="confirm" flexDirection="row" gap={1} alignItems="center" flexWrap="wrap">
           <Text>
@@ -331,7 +329,7 @@ function labelPicker(el: El, data: Data, selected: string[], idPrefix: string) {
 }
 
 /** The new-issue form: title, a one-line body, labels and a milestone. */
-export function newIssueView(el: El, data: Data, ui: Ui, draft: NewIssue, rules: TriageRules, act: NewIssueActions) {
+export function newIssueView(el: El, data: Data, ui: Ui, draft: NewIssue, rules: TriageRules, hasEditor: boolean, act: NewIssueActions) {
   const { Box, Text, Input, Select } = el
   const need = [rules.requireMilestone ? 'a milestone' : '', rules.requireLabelFrom.length ? `one of ${rules.requireLabelFrom.join(', ')}` : '']
     .filter(Boolean)
@@ -342,8 +340,9 @@ export function newIssueView(el: El, data: Data, ui: Ui, draft: NewIssue, rules:
         {pill(el, { id: 'new:back', kind: 'button', label: '← Issues', border: data.border })}
         <Text bold>New issue{data.repo ? ` in ${data.repo.owner}/${data.repo.repo}` : ''}</Text>
       </Box>
-      <Input key="new-title" placeholder="Title" value={draft.title} onInput={act.title} onSubmit={act.create} />
-      <Input key="new-body" placeholder="Description (one line here; write more on the web)" value={draft.body} onInput={act.body} onSubmit={act.create} />
+      {editor(el, data, ui, 'new-title', 'Title · Enter files the issue', false, 1)}
+      {editor(el, data, ui, 'new-body', 'Description in Markdown · Ctrl+Enter files the issue', true, 6)}
+      {editorTools(el, data, ui, 'new-body', hasEditor)}
       <Text dimColor>Labels</Text>
       {labelPicker(el, data, draft.labels, 'new:toggle:')}
       <Select key="new-milestone" options={milestoneOptions(data, null)} value={draft.milestone} onSelect={act.milestone} />
@@ -353,6 +352,49 @@ export function newIssueView(el: El, data: Data, ui: Ui, draft: NewIssue, rules:
         {pill(el, { id: 'new:cancel', kind: 'button', label: 'Cancel', border: data.border })}
       </Box>
       {ui.notice && <Text color={ui.notice.tone === 'ok' ? 'success' : 'error'}>{ui.notice.text}</Text>}
+    </Box>
+  )
+}
+
+/** One editor Client: its text comes from the field behind `id`; see editor.tsx. */
+function editor(el: El, data: Data, ui: Ui, id: string, placeholder: string, multiline: boolean, minRows: number) {
+  const { Client } = el
+  const value = id === 'comment' ? ui.draft : id === 'new-title' ? (ui.creating?.title ?? '') : (ui.creating?.body ?? '')
+  const props: EditorProps = {
+    id,
+    value,
+    sync: ui.sync[id] ?? 0,
+    placeholder,
+    multiline,
+    preview: ui.preview[id] === true,
+    minRows,
+    border: data.border,
+    cmd: ui.fmt[id] ?? null,
+  }
+  return <Client key={`ed-${id}`} module="./editor.tsx" props={props} width="100%" />
+}
+
+const FORMATS: [Format, string][] = [
+  ['bold', 'Bold'],
+  ['italic', 'Italic'],
+  ['code', 'Code'],
+  ['link', 'Link'],
+  ['heading', 'Heading'],
+  ['list', 'List'],
+  ['quote', 'Quote'],
+]
+
+/** The toolbar under a multi-line editor: Markdown marks, Write/Preview, and the external editor. */
+function editorTools(el: El, data: Data, ui: Ui, id: string, hasEditor: boolean) {
+  const { Box } = el
+  const previewing = ui.preview[id] === true
+  const out = ui.external?.id === id
+  return (
+    <Box key={`tools-${id}`} flexDirection="row" flexWrap="wrap" columnGap={2} alignItems="center">
+      {!previewing && FORMATS.map(([f, label]) => pill(el, { id: `fmt:${id}:${f}`, kind: 'chip', label }))}
+      {pill(el, { id: `preview:${id}`, kind: 'chip', label: previewing ? 'Write' : 'Preview', active: previewing })}
+      {hasEditor && !out && pill(el, { id: `editor:${id}`, kind: 'chip', label: 'Open in editor' })}
+      {out && pill(el, { id: 'editor-pull', kind: 'chip', label: 'Use editor text', active: true })}
     </Box>
   )
 }

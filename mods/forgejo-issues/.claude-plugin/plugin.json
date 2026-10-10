@@ -32,6 +32,12 @@
       "title": "New issues need one of these labels",
       "description": "Comma-separated label names (for example a set of type labels); the new-issue form refuses to file until one is picked. Empty for no rule.",
       "default": ""
+    },
+    "editorCommand": {
+      "type": "string",
+      "title": "External editor command",
+      "description": "Command that opens a file for editing and exits when you are done, {file} standing for the path (appended when absent). For example: ghostty --class=popup.editor -e nvim {file}. Empty hides the Open in editor button.",
+      "default": ""
     }
   }
 }
