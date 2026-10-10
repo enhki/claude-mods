@@ -89,6 +89,70 @@ file; one that returns at once (a launcher that forks) leaves a
 `--gtk-single-instance=false` for this, or it may hand the window to a running
 instance and return at once.
 
+## Writing a mod
+
+A mod is a plugin of function hooks: a `plugin.json`, a `hooks/hooks.json`
+naming one TypeScript module, and that module's `register(on, options)`. In a
+Claude Code session, the bundled `plugin-authoring` skill holds the full API
+(types, examples, the test kit); load it before writing one.
+
+### Where it lives
+
+| Kind | Where | Loads |
+| --- | --- | --- |
+| General, shareable | here, `mods/<name>/` + an entry in `.claude-plugin/marketplace.json` | everywhere, once installed at user scope |
+| Tied to one project, or naming private hosts | that project's `.claude/skills/<name>/` | in that project's sessions only, watched for edits |
+| Just for you, everywhere, private | `~/.claude/skills/<name>/` | every session, watched for edits |
+
+Anything that names a private host, a person or a machine stays out of this
+public repo: make it a project mod, or read the value from a setting.
+
+### Workflow
+
+1. **Sketch in the session's dev folder.** The `plugin-authoring` skill gives a
+   mods folder that hot-reloads when each turn ends: the quickest loop.
+2. **Move it here** as `mods/<name>/`, list it in the marketplace file, and
+   install it from this clone (below). From then on, edits are live after
+   `/reload-plugins`.
+3. **Test it on the surface you'll use.** The terminal and the desktop app draw
+   the same tree differently (see the notes below); try both when it matters.
+4. **Before each commit:** `claude plugin validate mods/<name>`,
+   `claude plugin test mods/<name>`, and a type-check. Bump `version` in the
+   mod's `plugin.json` when behaviour changes, so GitHub installs update.
+
+### Conventions shared by these mods
+
+- **Pure logic in its own files, with tests;** the hooks module stays thin.
+  `claude plugin test` runs `*.test.ts(x)` against the engine itself; a test
+  stands in for engine calls with `on('<event>', () => ({ value: … }))`.
+- **Settings** are the manifest's `userConfig` (shown in the plugin's options);
+  nothing personal is hard-coded.
+- **Secrets** go in `~/.config/claude-mods/secrets/<service>.env` (folder
+  `700`, file `600`), keyed by host where a token belongs to a host. A mod that
+  reads one also keeps Claude's own tools out of that folder (see
+  `forgejo-issues/hooks/guard.ts`).
+- **Saved state** (`$.state`) outlives reloads and upgrades: read *and* update
+  it through helpers that fill in defaults, or a field a new version adds
+  arrives `undefined`.
+
+### Desktop app notes (Claude Code 2.1.29x)
+
+- **Button and Markdown-link presses from a plugin pane don't arrive** (the
+  app logs `ui_press not handled` in `~/.config/Claude/logs/claude.ai-web.log`).
+  Input, Select and `Client` messages do. Make each pressable control its own
+  small `Client` that posts a message (`forgejo-issues/hooks/pill.tsx`).
+- **Set a `Client`'s pointer and key listeners once**, on its first draw. Each
+  set is a message to the page, and many `Client`s re-setting them on every
+  redraw get unmounted for flooding it.
+- **Don't map pointer rows by arithmetic.** Borders are thin lines, not rows,
+  and text is proportional (about 1.2 characters per cell). One `Client` per
+  clickable item makes hit-testing unnecessary.
+- **No paste into a `Client`**, and the native Input is one line at a fixed
+  width. For long text, hand off to an external editor (`forgejo-issues`'s
+  Open in editor).
+- A "Nothing to show yet" pane means the drawing threw; a transcript line
+  `<mod>: <event> hook skipped: threw …` names the handler that did.
+
 ## Developing
 
 Clone, then add the clone itself as your marketplace so edits are live after
@@ -96,7 +160,7 @@ Clone, then add the clone itself as your marketplace so edits are live after
 
 ```bash
 claude plugin marketplace add ~/repos/claude-mods
-claude plugin install statusline-desktop@claude-mods --scope user
+claude plugin install <mod>@claude-mods --scope user
 ```
 
 Check a mod before committing:
