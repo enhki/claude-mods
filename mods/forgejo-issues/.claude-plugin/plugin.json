@@ -1,6 +1,6 @@
 {
   "name": "forgejo-issues",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Browse the current repo's Forgejo or Gitea issues in a pane",
   "author": {
     "name": "enhki"
