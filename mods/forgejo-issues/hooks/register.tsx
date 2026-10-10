@@ -62,6 +62,16 @@ async function readData($: $): Promise<Data> {
   return { ...EMPTY_DATA, ...(await read($, data)) }
 }
 
+// Updates get the same defaults: the value handed to an update is the raw
+// saved one, so without this a field newer than the save reaches the code.
+function updateUi($: $, fn: (u: Ui) => Ui) {
+  return update($, ui, (x): Ui => fn({ ...EMPTY_UI, ...x }))
+}
+
+function updateData($: $, fn: (d: Data) => Data) {
+  return update($, data, (x): Data => fn({ ...EMPTY_DATA, ...x }))
+}
+
 async function readOrNull($: $, path: string): Promise<string | null> {
   try {
     return await $.fs.read(path)
@@ -89,7 +99,7 @@ async function resolveAuth($: $): Promise<string | null> {
   const ref = parseRemote(remote.stdout, apiUrl)
   if (!ref) return `Could not read the remote: ${remote.stdout.trim()}`
   const repo = { host: ref.host, owner: ref.owner, repo: ref.repo, webBase: ref.webBase }
-  await update($, data, (d): Data => ({ ...d, repo }))
+  await updateData($, (d): Data => ({ ...d, repo }))
   const found = pickToken(
     ref.host,
     await readOrNull($, `${secretsDir()}/forgejo.env`),
@@ -154,11 +164,11 @@ async function getAll<T>($: $, path: string, parse: (json: string) => T[]): Prom
 }
 
 async function fail($: $, message: string): Promise<void> {
-  await update($, data, (d): Data => ({ ...d, status: 'error', message }))
+  await updateData($, (d): Data => ({ ...d, status: 'error', message }))
 }
 
 async function load($: $): Promise<void> {
-  await update($, data, (d): Data => ({ ...d, status: 'loading', message: null }))
+  await updateData($, (d): Data => ({ ...d, status: 'loading', message: null }))
   const why = await resolveAuth($)
   if (why) return fail($, why)
   const base = `/repos/${auth!.repo.owner}/${auth!.repo.repo}`
@@ -178,14 +188,14 @@ async function load($: $): Promise<void> {
     const isLight = theme.includes('light')
     const border = isLight ? LIGHT_BORDER : DARK_BORDER
     const raised = isLight ? LIGHT_RAISED : DARK_RAISED
-    await update($, data, (d): Data => ({ ...d, status: 'ready', message: null, issues, labels, milestones, tokenSource, fetchedAt, border, raised }))
+    await updateData($, (d): Data => ({ ...d, status: 'ready', message: null, issues, labels, milestones, tokenSource, fetchedAt, border, raised }))
   } catch (err) {
     await fail($, `Unexpected answer from ${auth!.repo.host}: ${err instanceof Error ? err.message : String(err)}`)
   }
 }
 
 async function openIssue($: $, n: number): Promise<void> {
-  await update($, ui, (u): Ui => bump({ ...u, open: n, draft: '', armed: null, notice: null }, 'comment'))
+  await updateUi($, (u): Ui => bump({ ...u, open: n, draft: '', armed: null, notice: null }, 'comment'))
   const d = await readData($)
   if (!d.issues.some(i => i.number === n)) return
   await update($, detail, (): Detail => ({ number: n, status: 'loading', comments: [], message: null }))
@@ -214,17 +224,17 @@ async function openFirst($: $): Promise<void> {
 
 async function toggleChip($: $, name: string): Promise<void> {
   const d = await readData($)
-  await update($, ui, (u): Ui => ({ ...u, chips: toggleScoped(u.chips, name, d.labels) }))
+  await updateUi($, (u): Ui => ({ ...u, chips: toggleScoped(u.chips, name, d.labels) }))
 }
 
 async function notify($: $, tone: 'ok' | 'error', text: string): Promise<void> {
-  await update($, ui, (u): Ui => ({ ...u, notice: { tone, text }, armed: null }))
+  await updateUi($, (u): Ui => ({ ...u, notice: { tone, text }, armed: null }))
 }
 
 /** Swaps in the issue the API answered for a write, so the list and the detail view agree. */
 async function replaceIssue($: $, json: string): Promise<void> {
   const fresh = toIssues(`[${json}]`)[0]
-  if (fresh) await update($, data, (d): Data => ({ ...d, issues: d.issues.map(i => (i.number === fresh.number ? fresh : i)) }))
+  if (fresh) await updateData($, (d): Data => ({ ...d, issues: d.issues.map(i => (i.number === fresh.number ? fresh : i)) }))
 }
 
 /** Posts the draft as a comment on issue `n`; false when it did not land. */
@@ -238,11 +248,11 @@ async function postComment($: $, n: number, text: string): Promise<boolean> {
   await update($, detail, (cur): Detail | null =>
     cur?.number === n ? { ...cur, comments: [...cur.comments, ...posted] } : cur,
   )
-  await update($, data, (d): Data => ({
+  await updateData($, (d): Data => ({
     ...d,
     issues: d.issues.map(i => (i.number === n ? { ...i, comments: i.comments + 1 } : i)),
   }))
-  await update($, ui, (u): Ui => bump({ ...u, draft: '' }, 'comment'))
+  await updateUi($, (u): Ui => bump({ ...u, draft: '' }, 'comment'))
   return true
 }
 
@@ -250,7 +260,7 @@ async function postComment($: $, n: number, text: string): Promise<boolean> {
 async function write($: $, run: () => Promise<void>): Promise<void> {
   const u = await readUi($)
   if (u.busy) return
-  await update($, ui, (x): Ui => ({ ...x, busy: true, notice: null }))
+  await updateUi($, (x): Ui => ({ ...x, busy: true, notice: null }))
   try {
     if (!auth) {
       const why = await resolveAuth($)
@@ -258,7 +268,7 @@ async function write($: $, run: () => Promise<void>): Promise<void> {
     }
     await run()
   } finally {
-    await update($, ui, (x): Ui => ({ ...x, busy: false }))
+    await updateUi($, (x): Ui => ({ ...x, busy: false }))
   }
 }
 
@@ -278,7 +288,7 @@ async function arm($: $, action: 'close' | 'reopen'): Promise<void> {
   if (action === 'close' && requireCommentOnClose && !u.draft.trim()) {
     return notify($, 'error', 'Write a comment first: closing posts it, then closes, so the issue says why.')
   }
-  await update($, ui, (x): Ui => ({ ...x, armed: action, notice: null }))
+  await updateUi($, (x): Ui => ({ ...x, armed: action, notice: null }))
 }
 
 async function confirm($: $): Promise<void> {
@@ -320,7 +330,7 @@ async function saveLabels($: $): Promise<void> {
     if (typeof res === 'string') return notify($, 'error', res)
     const why = await refetchIssue($, n)
     if (why) return notify($, 'error', why)
-    await update($, ui, (x): Ui => ({ ...x, editingLabels: null }))
+    await updateUi($, (x): Ui => ({ ...x, editingLabels: null }))
     await notify($, 'ok', `Labels saved on #${n}.`)
   })
 }
@@ -353,8 +363,8 @@ async function createIssue($: $): Promise<void> {
     if (typeof res === 'string') return notify($, 'error', res)
     const created = toIssues(`[${res.text}]`)[0]
     if (!created) return notify($, 'error', 'The forge answered without the new issue.')
-    await update($, data, (x): Data => ({ ...x, issues: [created, ...x.issues] }))
-    await update($, ui, (x): Ui => ({ ...x, creating: null }))
+    await updateData($, (x): Data => ({ ...x, issues: [created, ...x.issues] }))
+    await updateUi($, (x): Ui => ({ ...x, creating: null }))
     await openIssue($, created.number)
     await notify($, 'ok', `Filed #${created.number}.`)
   })
@@ -396,7 +406,7 @@ async function openExternal($: $, id: string): Promise<void> {
   const dir = (await $.env.get('XDG_RUNTIME_DIR')) || '/tmp'
   const file = `${dir}/claude-mods-forgejo-${id}.md`
   await $.fs.write(file, getField(u, id))
-  await update($, ui, (x): Ui => ({ ...x, external: { id, file }, notice: { tone: 'ok', text: 'Editing in your editor: save and quit to bring the text back.' } }))
+  await updateUi($, (x): Ui => ({ ...x, external: { id, file }, notice: { tone: 'ok', text: 'Editing in your editor: save and quit to bring the text back.' } }))
   const started = await $.clock.now()
   try {
     const stream = $.process.spawn({ argv: editorArgv(editorCommand, file) })
@@ -424,7 +434,7 @@ async function pullExternal($: $): Promise<void> {
   } catch {
     return notify($, 'error', 'The editor file is gone; nothing to bring back.')
   }
-  await update($, ui, (x): Ui => bump({ ...setField(x, id, text.replace(/\n$/, '')), external: null }, id))
+  await updateUi($, (x): Ui => bump({ ...setField(x, id, text.replace(/\n$/, '')), external: null }, id))
   await $.process.run(['rm', '-f', file])
   await notify($, 'ok', 'Brought the text back from your editor.')
 }
@@ -434,15 +444,15 @@ async function press($: $, id: string): Promise<void> {
   const [kind, ...rest] = id.split(':')
   const arg = rest.join(':')
   if (kind === 'state' && (arg === 'open' || arg === 'closed' || arg === 'all')) {
-    await update($, ui, (x): Ui => ({ ...x, state: arg }))
+    await updateUi($, (x): Ui => ({ ...x, state: arg }))
   } else if (kind === 'grouped') {
-    await update($, ui, (x): Ui => ({ ...x, grouped: !x.grouped }))
+    await updateUi($, (x): Ui => ({ ...x, grouped: !x.grouped }))
   } else if (kind === 'refresh') {
     await load($)
   } else if (kind === 'chip') {
     await toggleChip($, arg)
   } else if (kind === 'back') {
-    await update($, ui, (x): Ui => ({ ...x, open: null }))
+    await updateUi($, (x): Ui => ({ ...x, open: null }))
   } else if (kind === 'open' && /^\d+$/.test(arg)) {
     await openIssue($, Number(arg))
   } else if (kind === 'comment') {
@@ -452,7 +462,7 @@ async function press($: $, id: string): Promise<void> {
   } else if (kind === 'confirm') {
     await confirm($)
   } else if (kind === 'cancel') {
-    await update($, ui, (x): Ui => ({ ...x, armed: null }))
+    await updateUi($, (x): Ui => ({ ...x, armed: null }))
   } else if (kind === 'labels') {
     await pressLabels($, arg)
   } else if (kind === 'new') {
@@ -460,10 +470,10 @@ async function press($: $, id: string): Promise<void> {
   } else if (kind === 'fmt') {
     const [id, format] = arg.split(':')
     if (id && isFormat(format)) {
-      await update($, ui, (x): Ui => ({ ...x, fmt: { ...x.fmt, [id]: { seq: (x.fmt[id]?.seq ?? 0) + 1, format } } }))
+      await updateUi($, (x): Ui => ({ ...x, fmt: { ...x.fmt, [id]: { seq: (x.fmt[id]?.seq ?? 0) + 1, format } } }))
     }
   } else if (kind === 'preview') {
-    await update($, ui, (x): Ui => ({ ...x, preview: { ...x.preview, [arg]: !x.preview[arg] } }))
+    await updateUi($, (x): Ui => ({ ...x, preview: { ...x.preview, [arg]: !x.preview[arg] } }))
   } else if (kind === 'editor') {
     // Not awaited: an editing session outlasts any hook's time budget.
     void openExternal($, arg)
@@ -478,14 +488,14 @@ async function pressLabels($: $, arg: string): Promise<void> {
   if (arg === 'edit') {
     const u = await readUi($)
     const issue = d.issues.find(i => i.number === u.open)
-    if (issue) await update($, ui, (x): Ui => ({ ...x, editingLabels: issue.labels.map(l => l.name), notice: null }))
+    if (issue) await updateUi($, (x): Ui => ({ ...x, editingLabels: issue.labels.map(l => l.name), notice: null }))
   } else if (arg === 'save') {
     await saveLabels($)
   } else if (arg === 'cancel') {
-    await update($, ui, (x): Ui => ({ ...x, editingLabels: null }))
+    await updateUi($, (x): Ui => ({ ...x, editingLabels: null }))
   } else if (arg.startsWith('toggle:')) {
     const name = arg.slice('toggle:'.length)
-    await update($, ui, (x): Ui => (x.editingLabels ? { ...x, editingLabels: toggleScoped(x.editingLabels, name, d.labels) } : x))
+    await updateUi($, (x): Ui => (x.editingLabels ? { ...x, editingLabels: toggleScoped(x.editingLabels, name, d.labels) } : x))
   }
 }
 
@@ -493,16 +503,16 @@ async function pressLabels($: $, arg: string): Promise<void> {
 async function pressNew($: $, arg: string): Promise<void> {
   const d = await readData($)
   if (arg === 'start') {
-    await update($, ui, (x): Ui =>
+    await updateUi($, (x): Ui =>
       bump(bump({ ...x, open: null, notice: null, creating: { title: '', body: '', labels: [], milestone: '' } }, 'new-title'), 'new-body'),
     )
   } else if (arg === 'create') {
     await createIssue($)
   } else if (arg === 'cancel' || arg === 'back') {
-    await update($, ui, (x): Ui => ({ ...x, creating: null, notice: null }))
+    await updateUi($, (x): Ui => ({ ...x, creating: null, notice: null }))
   } else if (arg.startsWith('toggle:')) {
     const name = arg.slice('toggle:'.length)
-    await update($, ui, (x): Ui =>
+    await updateUi($, (x): Ui =>
       x.creating ? { ...x, creating: { ...x.creating, labels: toggleScoped(x.creating.labels, name, d.labels) } } : x,
     )
   }
@@ -548,7 +558,7 @@ export const register: Register = (on, options) => {
     if (typeof msg?.edit === 'string' && typeof msg.text === 'string') {
       const id = msg.edit
       const text = msg.text
-      await update($, ui, (x): Ui => setField(x, id, text))
+      await updateUi($, (x): Ui => setField(x, id, text))
     }
     if (msg?.submit === 'comment') await comment($)
     if (msg?.submit === 'new-title' || msg?.submit === 'new-body') await createIssue($)
@@ -569,7 +579,7 @@ export const register: Register = (on, options) => {
     const issue = u.open === null ? undefined : d.issues.find(i => i.number === u.open)
     if (u.creating) {
       return newIssueView(el, d, u, u.creating, triageRules, editorCommand !== '', {
-        milestone: value => update($, ui, (x): Ui => (x.creating ? { ...x, creating: { ...x.creating, milestone: value } } : x)),
+        milestone: value => updateUi($, (x): Ui => (x.creating ? { ...x, creating: { ...x.creating, milestone: value } } : x)),
       })
     }
     if (issue) {
@@ -578,9 +588,9 @@ export const register: Register = (on, options) => {
       })
     }
     return listView(el, d, u, now, e.surface === 'desktop', {
-      query: text => update($, ui, (x): Ui => ({ ...x, query: text })),
+      query: text => updateUi($, (x): Ui => ({ ...x, query: text })),
       openFirst: () => openFirst($),
-      milestone: value => update($, ui, (x): Ui => ({ ...x, milestone: value })),
+      milestone: value => updateUi($, (x): Ui => ({ ...x, milestone: value })),
     })
   })
 }
