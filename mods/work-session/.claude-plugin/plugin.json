@@ -1,0 +1,36 @@
+{
+  "name": "work-session",
+  "version": "0.1.0",
+  "description": "Kick off and wrap up working sessions with your start and end commands, and give each session a useful title",
+  "author": { "name": "enhki" },
+  "repository": "https://github.com/enhki/claude-mods",
+  "license": "MIT",
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "startCommand": {
+      "type": "string",
+      "title": "Start command",
+      "description": "The slash command (without the slash) that kicks off a working session. The kickoff is offered only in projects that have it.",
+      "default": "cws"
+    },
+    "endCommand": {
+      "type": "string",
+      "title": "End command",
+      "description": "The slash command (without the slash) that wraps up a working session, offered when the context or a rate limit runs high.",
+      "default": "ews"
+    },
+    "kickoff": {
+      "type": "string",
+      "title": "Kickoff",
+      "description": "band: offer the start command above the prompt (press 1 to run it, or just type to do something else). auto: run it as the session starts. off: never.",
+      "options": ["band", "auto", "off"],
+      "default": "band"
+    },
+    "wrapAtPercent": {
+      "type": "number",
+      "title": "Offer the wrap at (context %)",
+      "description": "Offer the end command once the context window is this full, or once a rate limit passes 90%. 0 turns the offer off.",
+      "default": 75
+    }
+  }
+}

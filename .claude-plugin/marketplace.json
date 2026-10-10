@@ -14,6 +14,11 @@
       "name": "forgejo-issues",
       "source": "./mods/forgejo-issues",
       "description": "Browse and search the current repo's Forgejo or Gitea issues in a pane"
+    },
+    {
+      "name": "work-session",
+      "source": "./mods/work-session",
+      "description": "Kick off and wrap up working sessions with your start and end commands, with a useful session title"
     }
   ]
 }

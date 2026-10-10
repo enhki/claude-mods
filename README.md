@@ -21,6 +21,7 @@ loads in every session, desktop ones included.
 | --- | --- |
 | [`statusline-desktop`](mods/statusline-desktop) | Draws your terminal status line above the prompt in the desktop app |
 | [`forgejo-issues`](mods/forgejo-issues) | Browse, search and manage the current repo's Forgejo or Gitea issues in a pane |
+| [`work-session`](mods/work-session) | Kicks off and wraps up working sessions with your own start and end commands, and titles each session |
 
 ### statusline-desktop
 
@@ -88,6 +89,38 @@ file; one that returns at once (a launcher that forks) leaves a
 **Use editor text** button to pull the file back by hand. Ghostty needs
 `--gtk-single-instance=false` for this, or it may hand the window to a running
 instance and return at once.
+
+### work-session
+
+For projects where you start and end each working session with your own slash
+commands (a "continue working session" and an "end working session", say
+`/cws` and `/ews`), this mod offers them at the right moments and gives each
+session a title you can tell apart in the session list.
+
+- **Kickoff:** when a session starts fresh (launch or `/clear`, not a resume)
+  in a project that has the start command, a band above the prompt offers it:
+  press `1` to run it, `2` to skip, or just type something else. Set
+  **Kickoff** to `auto` to run it straight away, or `off`.
+- **Title:** Claude gets a `set_session_title` tool and a line of context
+  asking it to title the session once its focus is clear:
+  `<Project> S<n> · <focus>` when the project numbers its sessions, else
+  `<Project> · <focus>`. The title shows from your next message on. A
+  `/rename` of your own wins: the mod stops setting it.
+- **Wrap:** once the context window passes **Offer the wrap at** (75% by
+  default) or a rate limit passes 90%, the band offers the end command, with
+  **Later** to dismiss it for the session.
+
+Projects without the start command see nothing. In the desktop app the band
+draws above the desktop status line rather than in place of it.
+
+**Settings** (the plugin's options):
+
+| Setting | Default | What it does |
+| --- | --- | --- |
+| `startCommand` | `cws` | The command that kicks a session off, without the slash |
+| `endCommand` | `ews` | The command that wraps one up |
+| `kickoff` | `band` | `band` offers it, `auto` runs it at start, `off` never |
+| `wrapAtPercent` | `75` | Context fullness that brings up the wrap offer; `0` turns it off |
 
 ## Writing a mod
 
