@@ -36,7 +36,7 @@
     "editorCommand": {
       "type": "string",
       "title": "External editor command",
-      "description": "Command that opens a file for editing and exits when you are done, {file} standing for the path (appended when absent). For example: ghostty --class=popup.editor -e nvim {file}. Empty hides the Open in editor button.",
+      "description": "Command that opens a file for editing and exits when you are done, {file} standing for the path (appended when absent). For example: ghostty --gtk-single-instance=false --class=popup.editor -e nvim {file}. Empty hides the Open in editor button.",
       "default": ""
     }
   }

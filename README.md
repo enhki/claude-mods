@@ -78,14 +78,16 @@ that secrets folder.
 | `requireCommentOnClose` | on | Closing needs a comment, posted before the close |
 | `requireMilestone` | off | New issues need a milestone |
 | `requireLabelFrom` | empty | New issues need one of these comma-separated labels |
-| `editorCommand` | empty | Adds **Open in editor**: e.g. `ghostty --class=popup.editor -e nvim {file}` |
+| `editorCommand` | empty | Adds **Open in editor**: e.g. `ghostty --gtk-single-instance=false --class=popup.editor -e nvim {file}` |
 
 **Desktop notes.** The desktop app currently drops Button and Markdown-link
 presses from plugin panes, so every control here is a small `Client` that posts
 a message instead; and it passes no paste into a `Client`, so for long or pasted
 text use **Open in editor**. The editor command must wait until you close the
 file; one that returns at once (a launcher that forks) leaves a
-**Use editor text** button to pull the file back by hand.
+**Use editor text** button to pull the file back by hand. Ghostty needs
+`--gtk-single-instance=false` for this, or it may hand the window to a running
+instance and return at once.
 
 ## Developing
 
