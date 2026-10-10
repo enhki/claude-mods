@@ -1,7 +1,9 @@
-export type KickoffPhase = 'none' | 'offered' | 'started' | 'skipped'
+/** `pending`: a fresh start not yet checked for the start command (the engine lists commands only once the session is bound). */
+export type KickoffPhase = 'none' | 'pending' | 'offered' | 'started' | 'skipped'
 export type WrapPhase = 'none' | 'offered' | 'dismissed' | 'started'
 
-export type Kickoff = { phase: KickoffPhase; command: string }
+/** `told`: the model has had the start context (titling) in this session. */
+export type Kickoff = { phase: KickoffPhase; command: string; told: boolean }
 export type Wrap = { phase: WrapPhase; reason: string }
 /** `applied`: re-sent with every prompt so the session keeps it; null hands titling back to Claude Code. */
 export type Title = { applied: string | null }

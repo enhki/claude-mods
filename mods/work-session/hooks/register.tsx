@@ -4,6 +4,7 @@ import type { EngineInterface as $, Register } from 'claude-code'
 import type { Kickoff, Title, Wrap } from '../types'
 import {
   cleanTitle,
+  commandFiles,
   commandName,
   hasCommand,
   isFreshStart,
@@ -16,6 +17,8 @@ import type { KickoffMode } from './session'
 
 const PLUGIN = 'work-session'
 const TOOL = 'set_session_title'
+// The desktop app keeps its own session titles and ignores a hook's sessionTitle.
+const APP_TITLE_TOOL = 'mcp__ccd_session_mgmt__set_session_title'
 // Press ids carry the plugin's name: the band is shared with other plugins' Clients.
 const P = {
   kickoff: `${PLUGIN}:kickoff`,
@@ -24,7 +27,7 @@ const P = {
   later: `${PLUGIN}:later`,
 } as const
 
-const EMPTY_KICKOFF: Kickoff = { phase: 'none', command: '' }
+const EMPTY_KICKOFF: Kickoff = { phase: 'none', command: '', told: false }
 const EMPTY_WRAP: Wrap = { phase: 'none', reason: '' }
 const EMPTY_TITLE: Title = { applied: null }
 
@@ -50,6 +53,59 @@ async function runCommand($: $, name: string): Promise<void> {
     await $.command.run({ command: name, args: '' })
   } catch (err) {
     $.ui.log(`${PLUGIN}: could not run /${name}: ${err instanceof Error ? err.message : String(err)}`)
+  }
+}
+
+// The engine lists commands only once the session is bound, never at SessionStart.
+// Null while it cannot; with `files`, the project's own command and skill files answer instead.
+async function commandExists($: $, name: string, files: boolean): Promise<boolean | null> {
+  try {
+    return hasCommand(await $.command.list(), name)
+  } catch {
+    if (!files) return null
+    const found = await Promise.all(commandFiles(await $.session.cwd(), name).map(p => $.fs.exists(p).catch(() => false)))
+    return found.some(Boolean)
+  }
+}
+
+/**
+ * Settles a pending kickoff into an offer, an auto run or nothing; the first caller wins.
+ * Without `files` it leaves the kickoff pending while the commands cannot be listed.
+ */
+async function resolveKickoff($: $, files: boolean): Promise<Kickoff> {
+  const k = await readKickoff($)
+  if (k.phase !== 'pending') return k
+  const exists = await commandExists($, start, files)
+  if (exists === null) return k
+  if (!exists) {
+    await setKickoff($, x => (x.phase === 'pending' ? { ...x, phase: 'none' } : x))
+    return readKickoff($)
+  }
+  const phase = mode === 'auto' ? 'started' : 'offered'
+  await setKickoff($, x => (x.phase === 'pending' ? { ...x, phase } : x))
+  if (mode === 'auto') void runCommand($, start)
+  return readKickoff($)
+}
+
+// Retried until the session is bound (the terminal mounts within a few hundred ms),
+// the last try reading the project's files instead.
+const SETTLE_TRIES = 20
+const SETTLE_MS = 250
+
+function settleSoon($: $, tries: number): void {
+  $.clock.after(SETTLE_MS, async () => {
+    const k = await resolveKickoff($, tries <= 1)
+    if (k.phase === 'pending' && tries > 1) settleSoon($, tries - 1)
+  })
+}
+
+async function setAppTitle($: $, t: string): Promise<string> {
+  try {
+    if (!(await $.tool.list()).some(x => x.name === APP_TITLE_TOOL)) return ''
+    const r = await $.tool.call({ tool: APP_TITLE_TOOL, session_id: 'self', title: t } as never)
+    return (r as { isError?: boolean }).isError ? ` The app refused the rename: ${(r as { text?: string }).text ?? ''}` : ''
+  } catch (err) {
+    return ` The app could not rename it: ${err instanceof Error ? err.message : String(err)}`
   }
 }
 
@@ -90,36 +146,45 @@ export const register: Register = (on, options) => {
   })
 
   // The classic event carries the start's source: only a fresh session is kicked off.
+  // The commands cannot be listed yet, so the kickoff waits as pending: the
+  // terminal settles it at the first draw of the band, the desktop (which starts
+  // the session with the first message) at the first prompt.
   on('classic.SessionStart', async ($, e, next) => {
     const result = await next(e)
     if (!isFreshStart(e.source)) return result
     await Promise.all([
-      setKickoff($, () => EMPTY_KICKOFF),
+      setKickoff($, () => (mode === 'off' ? EMPTY_KICKOFF : { ...EMPTY_KICKOFF, phase: 'pending', command: start })),
       setWrap($, () => EMPTY_WRAP),
       setTitle($, () => EMPTY_TITLE),
     ])
-    if (mode === 'off' || !hasCommand(await $.command.list(), start)) return result
-    if (mode === 'auto') {
-      await setKickoff($, () => ({ phase: 'started', command: start }))
-      void runCommand($, start)
-    } else {
-      await setKickoff($, () => ({ phase: 'offered', command: start }))
-    }
-    return { ...result, additionalContext: [...(result.additionalContext ?? []), startContext(start)] }
+    if (mode !== 'off') settleSoon($, SETTLE_TRIES)
+    return result
   })
 
-  // Re-sent with every prompt, so the session keeps the title it was given.
+  // The start context rides the first prompt of a kicked-off session; the title
+  // is re-sent with every prompt, so the session keeps it.
   on('classic.UserPromptSubmit', async ($, e, next) => {
     const result = await next(e)
+    const k = await resolveKickoff($, true)
+    const context = [...(result.additionalContext ?? [])]
+    if (k.phase !== 'none' && !k.told) {
+      await setKickoff($, x => ({ ...x, told: true }))
+      context.push(startContext(start))
+    }
     const t = await readTitle($)
-    return t.applied ? { ...result, sessionTitle: t.applied } : result
+    return {
+      ...result,
+      ...(context.length ? { additionalContext: context } : {}),
+      ...(t.applied ? { sessionTitle: t.applied } : {}),
+    }
   })
 
   on('tool.call', { tool: 'mcp__work-session__set_session_title' }, async ($, e) => {
     const cleaned = cleanTitle((e as unknown as { title?: unknown }).title)
     if ('error' in cleaned) return { deny: `${TOOL}: ${cleaned.error}` }
     await setTitle($, () => ({ applied: cleaned.title }))
-    return { result: `Session title set to "${cleaned.title}"; it shows from the user's next message.` }
+    const app = await setAppTitle($, cleaned.title)
+    return { result: `Session title set to "${cleaned.title}"; it shows from the user's next message.${app}` }
   })
 
   // Anything the person types instead of pressing 1 means this session needs no kickoff.

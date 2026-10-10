@@ -21,6 +21,12 @@ export function hasCommand(list: readonly { name: string }[], name: string): boo
   return name !== '' && list.some(c => c.name === name)
 }
 
+/** Where a project keeps a slash command of its own, as a command file or a skill. */
+export function commandFiles(cwd: string, name: string): string[] {
+  const root = cwd.replace(/\/+$/, '')
+  return [`${root}/.claude/commands/${name}.md`, `${root}/.claude/skills/${name}/SKILL.md`]
+}
+
 /** A fresh working session starts at launch or after /clear; a resume or compact continues one. */
 export function isFreshStart(source: StartSource): boolean {
   return source === 'startup' || source === 'clear'
