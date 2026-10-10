@@ -22,6 +22,7 @@ loads in every session, desktop ones included.
 | [`statusline-desktop`](mods/statusline-desktop) | Draws your terminal status line above the prompt in the desktop app |
 | [`forgejo-issues`](mods/forgejo-issues) | Browse, search and manage the current repo's Forgejo or Gitea issues in a pane |
 | [`work-session`](mods/work-session) | Kicks off and wraps up working sessions with your own start and end commands, and titles each session |
+| [`walkthrough`](mods/walkthrough) | A checklist pane for testing by hand: mark each step, add notes, send the results back in one message |
 
 ### statusline-desktop
 
@@ -121,6 +122,28 @@ draws above the desktop status line rather than in place of it.
 | `endCommand` | `ews` | The command that wraps one up |
 | `kickoff` | `band` | `band` offers it, `auto` runs it at start, `off` never |
 | `wrapAtPercent` | `75` | Context fullness that brings up the wrap offer; `0` turns it off |
+
+### walkthrough
+
+When Claude asks you to check something by hand (run a demo, resize a window,
+try a key), it publishes the steps to a **Walkthrough** pane instead of a list
+in chat, and you send the results back from there.
+
+- **Steps:** each one says what to run, where (directory, terminal, window
+  size) and what you should see. Claude's `publish_walkthrough` tool refuses a
+  step that doesn't say what to expect. Publishing again replaces the list.
+- **The pane** opens when Claude publishes, or with `/walkthrough`. The step
+  you're on is drawn open: its command with **Copy**, what to expect,
+  **Pass** / **Fail** / **Skip** and a note. Marking it opens the next one;
+  done steps fold to one line you can click to reopen. Pressing a mark again
+  takes it back.
+- **Keys** (terminal, once the pane has the keyboard): `p` pass, `f` fail,
+  `s` skip, `c` copy, `r` send.
+- **Send results** submits one message: a tally, then each step as PASS,
+  FAIL, SKIP or NOT DONE with your note beside it.
+
+Screenshots don't go through the pane: paste them in the prompt as usual.
+No settings.
 
 ## Writing a mod
 

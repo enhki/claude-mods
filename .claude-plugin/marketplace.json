@@ -19,6 +19,11 @@
       "name": "work-session",
       "source": "./mods/work-session",
       "description": "Kick off and wrap up working sessions with your start and end commands, with a useful session title"
+    },
+    {
+      "name": "walkthrough",
+      "source": "./mods/walkthrough",
+      "description": "A checklist pane for manual testing: Claude publishes the steps, you mark each one and send the results back"
     }
   ]
 }

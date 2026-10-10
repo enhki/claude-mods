@@ -1,0 +1,9 @@
+{
+  "name": "walkthrough",
+  "version": "0.1.0",
+  "description": "A checklist pane for manual testing: Claude publishes the steps, you mark each pass, fail or skip with a note, and the results go back as one message",
+  "author": { "name": "enhki" },
+  "repository": "https://github.com/enhki/claude-mods",
+  "license": "MIT",
+  "types": "./types/index.d.ts"
+}
