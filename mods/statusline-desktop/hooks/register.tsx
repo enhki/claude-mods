@@ -118,13 +118,19 @@ export const register: Register = on => {
     const segments = await read($, line)
     if (!segments || segments.length === 0) return next(e)
     const { Box, Text } = $.ui.resolve(e)
+    // The band is shared: what the plugins beneath draw (a kickoff offer) stacks
+    // above the line, which stays next to the prompt as in the terminal.
+    const beneath = await next(e)
     return (
-      <Box flexDirection="row">
-        {segments.map((s, i) => (
-          <Text key={String(i)} color={s.color} bold={s.bold} dimColor={s.dim} wrap="truncate-end">
-            {s.text}
-          </Text>
-        ))}
+      <Box flexDirection="column">
+        {beneath}
+        <Box flexDirection="row">
+          {segments.map((s, i) => (
+            <Text key={String(i)} color={s.color} bold={s.bold} dimColor={s.dim} wrap="truncate-end">
+              {s.text}
+            </Text>
+          ))}
+        </Box>
       </Box>
     )
   })
