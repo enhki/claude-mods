@@ -32,6 +32,14 @@ Public repo of Claude Code mods (plugins of function hooks), published at
   `if (surface.state === undefined)`, never on every draw.
 - Never compute which item a pointer row hits; one `Client` per item.
 - `$.state` reads and updates go through default-filling helpers.
+- The `AbovePrompt` band is shared: every `ui.render` hook on it calls
+  `next(e)` and stacks its row with what comes back, never instead of it.
+- The desktop app runs the installed copy of a mod, not this folder: after a
+  change, bump the mod's `version`, run `claude plugin update <mod>@claude-mods`
+  and test in a new desktop session. The terminal reads the folder directly.
+- The desktop starts the session with the first message: nothing can be
+  offered before it, and the app keeps its own session title (rename through
+  its `set_session_title` tool, not a hook's `sessionTitle`).
 - No ydotool or screenshots while the user is at the desktop; ask them to
   test, and read `~/.config/Claude/logs/claude.ai-web.log` for
   `not handled` / `flooded` lines.
