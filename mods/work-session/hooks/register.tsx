@@ -8,9 +8,12 @@ import {
   commandName,
   hasCommand,
   isFreshStart,
+  isStartPrompt,
   kickoffMode,
   startContext,
+  TITLE_NUDGES,
   TITLE_TOOL_DESCRIPTION,
+  titleNudge,
   wrapReason,
 } from './session'
 import type { KickoffMode } from './session'
@@ -27,7 +30,7 @@ const P = {
   later: `${PLUGIN}:later`,
 } as const
 
-const EMPTY_KICKOFF: Kickoff = { phase: 'none', command: '', told: false }
+const EMPTY_KICKOFF: Kickoff = { phase: 'none', command: '', told: false, nudges: 0 }
 const EMPTY_WRAP: Wrap = { phase: 'none', reason: '' }
 const EMPTY_TITLE: Title = { applied: null }
 
@@ -167,11 +170,15 @@ export const register: Register = (on, options) => {
     const result = await next(e)
     const k = await resolveKickoff($, true)
     const context = [...(result.additionalContext ?? [])]
+    const t = await readTitle($)
     if (k.phase !== 'none' && !k.told) {
       await setKickoff($, x => ({ ...x, told: true }))
       context.push(startContext(start))
+    } else if (k.phase === 'started' && !t.applied && k.nudges < TITLE_NUDGES && !isStartPrompt(e.prompt, start)) {
+      // The message after the kickoff usually picks the focus: the moment to title it.
+      await setKickoff($, x => ({ ...x, nudges: x.nudges + 1 }))
+      context.push(titleNudge(start))
     }
-    const t = await readTitle($)
     return {
       ...result,
       ...(context.length ? { additionalContext: context } : {}),

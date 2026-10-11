@@ -1,6 +1,6 @@
 {
   "name": "work-session",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Kick off and wrap up working sessions with your start and end commands, and give each session a useful title",
   "author": { "name": "enhki" },
   "repository": "https://github.com/enhki/claude-mods",

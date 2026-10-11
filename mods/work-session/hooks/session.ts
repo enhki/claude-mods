@@ -74,6 +74,23 @@ export function startContext(start: string): string {
   ].join(' ')
 }
 
+// Reminders after the start command, while the session has no title.
+export const TITLE_NUDGES = 2
+
+/** The prompt that is the start command itself, typed or run from the band. */
+export function isStartPrompt(prompt: unknown, start: string): boolean {
+  return typeof prompt === 'string' && new RegExp(`^/${start.replace(/[.]/g, '\\.')}(\\s|$)`).test(prompt.trim())
+}
+
+/** Said with the prompts that follow the start command until a title is set. */
+export function titleNudge(start: string): string {
+  return [
+    `/${start} has run and this session has no title yet.`,
+    'If this message settles what the session is about, call the set_session_title tool first,',
+    "before anything else, numbering it from the session /" + start + " reported.",
+  ].join(' ')
+}
+
 export const TITLE_TOOL_DESCRIPTION = [
   "Sets this session's title, shown in the session list and the terminal tab, so the user can tell sessions apart.",
   'Call it once the focus of the session is clear, and again when it changes.',

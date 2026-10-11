@@ -204,3 +204,33 @@ test('the_title_tool_leaves_the_app_alone_where_it_has_no_rename_tool', async ($
   await $.tool.call({ tool: 'mcp__work-session__set_session_title', title: 'Atlas S12 · x' } as never)
   expect(eng.appTitles).toEqual([])
 })
+
+const nudged = (r: { additionalContext?: string[] }) => (r.additionalContext ?? []).some(c => c.includes('has no title yet'))
+
+test('the_message_after_the_kickoff_reminds_the_model_to_title', async ($, on) => {
+  const eng = fakeEngine(on)
+  await start($, eng)
+  await $.command.run({ command: 'cws', args: '' } as never)
+  const kickoff = await $.classic.UserPromptSubmit({ prompt: '/cws' } as never)
+  expect(kickoff.additionalContext?.some(c => c.includes('kicks off'))).toBe(true)
+  expect(nudged(kickoff)).toBe(false)
+  expect(nudged(await send($, 'the parser'))).toBe(true)
+  await $.tool.call({ tool: 'mcp__work-session__set_session_title', title: 'P S7 · Parser' } as never)
+  expect(nudged(await send($, 'next'))).toBe(false)
+})
+
+test('title_reminders_stop_after_two', async ($, on) => {
+  const eng = fakeEngine(on)
+  await start($, eng)
+  await $.command.run({ command: 'cws', args: '' } as never)
+  await $.classic.UserPromptSubmit({ prompt: '/cws' } as never)
+  const results = [await send($, 'a'), await send($, 'b'), await send($, 'c')]
+  expect(results.map(nudged)).toEqual([true, true, false])
+})
+
+test('no_title_reminder_without_the_kickoff', async ($, on) => {
+  const eng = fakeEngine(on)
+  await start($, eng)
+  await send($, 'hey')
+  expect(nudged(await send($, 'more'))).toBe(false)
+})

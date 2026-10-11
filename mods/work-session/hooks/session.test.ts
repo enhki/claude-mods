@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { cleanTitle, commandFiles, commandName, hasCommand, isFreshStart, kickoffMode, wrapReason } from './session'
+import { cleanTitle, commandFiles, commandName, hasCommand, isFreshStart, isStartPrompt, kickoffMode, wrapReason } from './session'
 
 const usage = (percent: number, limits: { kind: string; percentUsed: number }[] = []) => ({
   context: { percent, window: 200_000 },
@@ -65,4 +65,8 @@ test('context_percent_falls_back_to_tokens_over_window', () => {
 
 test('command_files_name_the_project_command_and_skill', () => {
   expect(commandFiles('/r/', 'cws')).toEqual(['/r/.claude/commands/cws.md', '/r/.claude/skills/cws/SKILL.md'])
+})
+
+test('the_start_prompt_is_the_command_alone_or_with_args', () => {
+  expect([isStartPrompt('/cws', 'cws'), isStartPrompt(' /cws now', 'cws'), isStartPrompt('/cwsx', 'cws'), isStartPrompt('hey', 'cws')]).toEqual([true, true, false, false])
 })
