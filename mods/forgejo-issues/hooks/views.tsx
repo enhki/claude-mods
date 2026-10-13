@@ -5,6 +5,7 @@ import { ago, linkifyRefs, scopeOf } from './forge'
 import type { CardProps } from './card'
 import type { PillProps } from './pill'
 import { filterIssues, groupRows } from './search'
+import { repoKey, repoLabel } from './repos'
 import type { TriageRules } from './triage'
 import type { EditorProps } from './editor'
 import type { Format } from '../types'
@@ -17,6 +18,7 @@ export type ListActions = {
   query: (text: string) => void
   openFirst: () => void
   milestone: (value: string) => void
+  repo: (key: string) => void
 }
 
 /** What the detail view's composer calls. */
@@ -98,6 +100,28 @@ function chips(el: El, data: Data, ui: Ui) {
   )
 }
 
+/**
+ * The project's repos as buttons, the shown one lit; a Select past five.
+ * Nothing when the project lists no other repo.
+ */
+function repoSwitcher(el: El, data: Data, act: ListActions) {
+  const { Box, Text, Select } = el
+  if (!data.repo || data.choices.length < 2) return null
+  const current = repoKey(data.repo)
+  if (data.choices.length > 5) {
+    const options = data.choices.map(r => ({ value: repoKey(r), label: repoLabel(r, data.choices) }))
+    return <Select key="repo" options={options} value={current} onSelect={act.repo} />
+  }
+  return (
+    <Box key="repos" flexDirection="row" gap={1} flexWrap="wrap" alignItems="center">
+      <Text dimColor>Repo</Text>
+      {data.choices.map(r =>
+        pill(el, { id: `repo:${repoKey(r)}`, kind: 'button', label: repoLabel(r, data.choices), active: repoKey(r) === current, border: data.border }),
+      )}
+    </Box>
+  )
+}
+
 function milestonePicker(el: El, data: Data, ui: Ui, act: ListActions) {
   const { Select } = el
   const options = [
@@ -149,6 +173,7 @@ export function listView(el: El, data: Data, ui: Ui, now: number, proportional: 
 
   return (
     <Box flexDirection="column" gap={1}>
+      {repoSwitcher(el, data, act)}
       {header(el, data, ui, rows.length)}
       <Box key="search-row" flexDirection="row">
         <Box flexGrow={1} flexDirection="column">

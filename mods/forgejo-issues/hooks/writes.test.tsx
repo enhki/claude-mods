@@ -22,6 +22,7 @@ function fakeForge(on: On): Call[] {
   const calls: Call[] = []
   mock.clock(on)
   mock.env(on, { HOME: '/h' })
+  mock.store(on)
   // Hooks standing in for the engine answer { value }.
   on('session.cwd', () => ({ value: '/h/r' }))
   on('config.list', () => ({ value: [] }))

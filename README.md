@@ -58,6 +58,11 @@ any Forgejo or Gitea host, Codeberg included.
 - **Write:** comment, close and reopen (behind a Confirm), edit labels, set the
   milestone, file a new issue. Text goes in a full-width Markdown editor with a
   toolbar and a preview.
+- **Other repos:** when a project's issues live in more than one repo, list
+  the others in `.claude/forgejo-issues.json` in the folder you start Claude
+  in, as `{"repos": ["owner/repo"]}` on the same forge. The pane then shows a
+  button per repo (a picker past five), and `/issues <repo>` jumps to one by
+  name or prefix. The last repo picked is remembered for that project.
 
 **Token.** The mod needs an API token with issue read/write and repository
 read. Put it in `~/.config/claude-mods/secrets/forgejo.env` (folder `700`,

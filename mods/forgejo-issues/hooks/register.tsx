@@ -8,6 +8,7 @@ import { labelIds, milestoneId, newIssueProblem, parseLabelList, toggleScoped } 
 import { editorArgv } from './editing'
 import type { TriageRules } from './triage'
 import { filterIssues } from './search'
+import { REPOS_FILE, matchRepo, parseRepoList, repoChoices, repoKey } from './repos'
 import { detailView, listView, newIssueView } from './views'
 
 const PANE = 'forgejo-issues'
@@ -20,7 +21,7 @@ const DARK_BORDER = '#3a3a3a'
 const LIGHT_BORDER = '#d0d0d0'
 const DARK_RAISED = '#232323'
 const LIGHT_RAISED = '#f4f4f4'
-const EMPTY_DATA: Data = { status: 'idle', repo: null, issues: [], labels: [], milestones: [], message: null, tokenSource: null, fetchedAt: 0, border: DARK_BORDER, raised: DARK_RAISED }
+const EMPTY_DATA: Data = { status: 'idle', repo: null, choices: [], issues: [], labels: [], milestones: [], message: null, tokenSource: null, fetchedAt: 0, border: DARK_BORDER, raised: DARK_RAISED }
 const EMPTY_UI: Ui = {
   query: '',
   chips: [],
@@ -90,16 +91,37 @@ function secretsDir(): string {
   return `${configHome}/claude-mods/secrets`
 }
 
-/** Finds the repo and its token; a string is why it could not. */
-async function resolveAuth($: $): Promise<string | null> {
+/** The store key holding the repo last picked for a session repo. */
+function pickedKey(launch: RepoInfo): string {
+  return `picked:${launch.host}/${repoKey(launch)}`
+}
+
+/**
+ * Finds the repos and the token; a string is why it could not. The repo is
+ * the one last picked for this session's repo, or `arg` (`/issues <repo>`).
+ */
+async function resolveAuth($: $, arg = ''): Promise<string | null> {
   await paths($)
   const cwd = await $.session.cwd()
   const remote = await $.process.run(['git', 'remote', 'get-url', 'origin'], { cwd, timeoutMs: 5_000 })
   if (remote.exitCode !== 0) return 'This folder has no git remote named origin.'
   const ref = parseRemote(remote.stdout, apiUrl)
   if (!ref) return `Could not read the remote: ${remote.stdout.trim()}`
-  const repo = { host: ref.host, owner: ref.owner, repo: ref.repo, webBase: ref.webBase }
-  await updateData($, (d): Data => ({ ...d, repo }))
+  const launch = { host: ref.host, owner: ref.owner, repo: ref.repo, webBase: ref.webBase }
+  const choices = repoChoices(launch, parseRepoList(await readOrNull($, `${cwd}/${REPOS_FILE}`)))
+  if (arg.trim()) {
+    const hit = matchRepo(choices, arg)
+    if (!hit) {
+      await updateData($, (d): Data => ({ ...d, choices }))
+      return choices.length > 1
+        ? `No repo matches "${arg.trim()}". This pane switches between ${choices.map(repoKey).join(', ')}.`
+        : `This project lists no other repos. Add them to ${REPOS_FILE} as {"repos": ["owner/repo"]}.`
+    }
+    await $.store.set(pickedKey(launch), repoKey(hit))
+  }
+  const picked = await $.store.get(pickedKey(launch))
+  const repo = choices.find(r => repoKey(r) === picked) ?? launch
+  await updateData($, (d): Data => ({ ...d, repo, choices }))
   const found = pickToken(
     ref.host,
     await readOrNull($, `${secretsDir()}/forgejo.env`),
@@ -167,10 +189,19 @@ async function fail($: $, message: string): Promise<void> {
   await updateData($, (d): Data => ({ ...d, status: 'error', message }))
 }
 
-async function load($: $): Promise<void> {
+/** Drops what belonged to the repo the pane showed before: its filters, open issue and lists. */
+async function forgetRepo($: $): Promise<void> {
+  await updateUi($, (u): Ui => ({ ...u, query: '', chips: [], milestone: '', open: null, draft: '', armed: null, notice: null, editingLabels: null, creating: null }))
+  await update($, detail, (): Detail | null => null)
+  await updateData($, (d): Data => ({ ...d, issues: [], labels: [], milestones: [] }))
+}
+
+async function load($: $, arg = ''): Promise<void> {
+  const before = (await readData($)).repo
   await updateData($, (d): Data => ({ ...d, status: 'loading', message: null }))
-  const why = await resolveAuth($)
+  const why = await resolveAuth($, arg)
   if (why) return fail($, why)
+  if (before && repoKey(before) !== repoKey(auth!.repo)) await forgetRepo($)
   const base = `/repos/${auth!.repo.owner}/${auth!.repo.repo}`
   try {
     const [issues, labels, milestones] = await Promise.all([
@@ -449,6 +480,8 @@ async function press($: $, id: string): Promise<void> {
     await updateUi($, (x): Ui => ({ ...x, grouped: !x.grouped }))
   } else if (kind === 'refresh') {
     await load($)
+  } else if (kind === 'repo') {
+    await switchRepo($, arg)
   } else if (kind === 'chip') {
     await toggleChip($, arg)
   } else if (kind === 'back') {
@@ -480,6 +513,15 @@ async function press($: $, id: string): Promise<void> {
   } else if (kind === 'editor-pull') {
     await pullExternal($)
   }
+}
+
+/** Shows another of the project's repos: remembered for this session's repo, then loaded. */
+async function switchRepo($: $, key: string): Promise<void> {
+  const d = await readData($)
+  const launch = d.choices[0]
+  if (!launch || !d.choices.some(r => repoKey(r) === key) || (d.repo && repoKey(d.repo) === key)) return
+  await $.store.set(pickedKey(launch), key)
+  await load($)
 }
 
 /** `labels:edit`, `labels:save`, `labels:cancel`, `labels:toggle:<name>` in the detail view. */
@@ -534,13 +576,13 @@ export const register: Register = (on, options) => {
   }
 
   on('session.start', async ($, e, next) => {
-    await $.command.register({ name: 'issues', description: "Show this repo's Forgejo issues in a pane" })
+    await $.command.register({ name: 'issues', description: "Show this repo's Forgejo issues in a pane; /issues <repo> switches to another the project lists" })
     return next(e)
   })
 
-  on('command.run', { command: 'issues' }, async $ => {
+  on('command.run', { command: 'issues' }, async ($, e) => {
     await $.ui.open({ id: PANE, title: 'Issues' })
-    void load($)
+    void load($, e.args)
     return { text: 'Issues pane opened.' }
   })
 
@@ -591,6 +633,7 @@ export const register: Register = (on, options) => {
       query: text => updateUi($, (x): Ui => ({ ...x, query: text })),
       openFirst: () => openFirst($),
       milestone: value => updateUi($, (x): Ui => ({ ...x, milestone: value })),
+      repo: key => switchRepo($, key),
     })
   })
 }

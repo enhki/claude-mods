@@ -29,6 +29,8 @@ export type RepoInfo = { host: string; owner: string; repo: string; webBase: str
 export type Data = {
   status: 'idle' | 'loading' | 'ready' | 'error'
   repo: RepoInfo | null
+  /** The repos the pane can switch between: the session's own first, then the project's list. */
+  choices: RepoInfo[]
   issues: Issue[]
   labels: Label[]
   milestones: Milestone[]
