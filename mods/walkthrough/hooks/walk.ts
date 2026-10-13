@@ -5,7 +5,7 @@ import type { Mark, Step, Walkthrough } from '../types'
 export const MAX_STEPS = 40
 const MAX_TEXT = 2_000
 
-export const EMPTY: Walkthrough = { title: '', intro: '', steps: [], marks: [], notes: [], open: null, sent: 0 }
+export const EMPTY: Walkthrough = { title: '', intro: '', steps: [], marks: [], notes: [], open: null, sent: 0, rev: 0 }
 
 function text(raw: unknown, max = MAX_TEXT): string {
   return typeof raw === 'string' ? raw.trim().slice(0, max) : ''

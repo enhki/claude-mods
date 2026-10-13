@@ -22,6 +22,8 @@ export type Walkthrough = {
   open: number | null
   /** How many times the results were sent back. */
   sent: number
+  /** Bumped on every publish: the desktop note editors are keyed by it, so a new walkthrough mounts fresh ones. */
+  rev: number
 }
 
 declare module 'claude-code' {

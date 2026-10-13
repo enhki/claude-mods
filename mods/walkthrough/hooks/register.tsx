@@ -85,7 +85,7 @@ export const register: Register = on => {
   on('tool.call', { tool: 'mcp__walkthrough__publish_walkthrough' }, async ($, e) => {
     const parsed = parse(e)
     if ('error' in parsed) return { deny: `${TOOL}: ${parsed.error}` }
-    await setWalk($, () => parsed.walkthrough)
+    await setWalk($, prev => ({ ...parsed.walkthrough, rev: prev.rev + 1 }))
     const { isPlaced } = await $.ui.open({ id: PANE, title: 'Walkthrough' })
     const n = parsed.walkthrough.steps.length
     const where = isPlaced ? 'It is open in the Walkthrough pane' : 'The person opens it with /walkthrough'
@@ -96,10 +96,15 @@ export const register: Register = on => {
     }
   })
 
-  // The desktop's controls are Clients posting { press }.
+  // The desktop's controls are Clients posting { press }; its note editors post { note, text }.
   on('ui.message', { component: 'Pane', requestId: PANE }, async ($, e) => {
-    const id = (e.data as { press?: unknown } | null)?.press
-    if (typeof id === 'string') await press($, id, e.surface)
+    const msg = e.data as { press?: unknown; note?: unknown; text?: unknown } | null
+    if (typeof msg?.press === 'string') await press($, msg.press, e.surface)
+    if (typeof msg?.note === 'number' && typeof msg.text === 'string') {
+      const i = msg.note
+      const text = msg.text
+      await setWalk($, w => note(w, i, text))
+    }
     return {}
   })
 
@@ -158,15 +163,25 @@ export const register: Register = on => {
               control(`${k}:${i}`, m === k ? `${LABEL[k]} ✓` : LABEL[k], { hotkey: k[0], tone: m === k ? TONE[k] : undefined }),
             )}
           </Box>
-          <Input
-            key={`note:${i}`}
-            label="Note "
-            placeholder="what you saw (optional)"
-            value={w.notes[i] ?? ''}
-            submitLabel="save"
-            onInput={value => setWalk($, x => note(x, i, value))}
-            onSubmit={value => setWalk($, x => note(x, i, value))}
-          />
+          {surface === 'terminal' ? (
+            <Input
+              key={`note:${i}`}
+              label="Note "
+              placeholder="what you saw (optional)"
+              value={w.notes[i] ?? ''}
+              submitLabel="save"
+              onInput={value => setWalk($, x => note(x, i, value))}
+              onSubmit={value => setWalk($, x => note(x, i, value))}
+            />
+          ) : (
+            // The desktop's Input is one fixed-width line: a long note ran out of sight.
+            <Client
+              key={`note:${w.rev}:${i}`}
+              module="./note.tsx"
+              props={{ step: i, value: w.notes[i] ?? '', placeholder: 'Note: what you saw (optional)' }}
+              width="100%"
+            />
+          )}
         </Box>
       )
     })

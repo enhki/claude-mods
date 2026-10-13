@@ -36,6 +36,7 @@ function fakeEngine(on: On): { prompts: string[]; copies: string[] } {
 
 type Pressable = {
   press: (target: { key: string }) => Promise<unknown>
+  input: (target: { key: string; text: string }) => Promise<unknown>
   post: (data: JsonValue, scope?: { in: string }) => Promise<void>
 }
 
@@ -43,6 +44,9 @@ for (const surface of ['terminal', 'desktop'] as const) {
   // A press as the person makes it on this surface: a Button, or a Client's post.
   const pressOn = (ui: Pressable, id: string) =>
     surface === 'terminal' ? ui.press({ key: id }) : ui.post({ press: id }, { in: id })
+  // A note as typed: the terminal's Input, or the desktop note editor's post (keyed by the publish rev).
+  const noteOn = (ui: Pressable, step: number, text: string, rev = 1) =>
+    surface === 'terminal' ? ui.input({ key: `note:${step}`, text }) : ui.post({ note: step, text }, { in: `note:${rev}:${step}` })
 
   test(`${surface}_an_empty_pane_says_what_it_is_for`, async $ => {
     const ui = await $.ui.mount({ ...PANE, surface })
@@ -65,7 +69,7 @@ for (const surface of ['terminal', 'desktop'] as const) {
     const ui = await $.ui.mount({ ...PANE, surface })
     await pressOn(ui, 'pass:0')
     expect(await ui.find({ text: /Expect: The sidebar/ })).toBeDefined()
-    await ui.input({ key: 'note:1', text: 'overlaps' })
+    await noteOn(ui, 1, 'overlaps')
     await pressOn(ui, 'fail:1')
     expect(await ui.find({ text: /1 passed, 1 failed/ })).toBeDefined()
     await pressOn(ui, 'send')
@@ -86,4 +90,17 @@ test('a_step_without_an_expectation_is_refused', async ($, on) => {
   fakeEngine(on)
   const result = await $.tool.call({ ...STEPS, steps: [{ title: 'x' }] } as never)
   expect(JSON.stringify(result)).toContain('says nothing about what to expect')
+})
+
+test('desktop_a_long_note_keeps_every_line_and_a_republish_starts_fresh', async ($, on) => {
+  const seen = fakeEngine(on)
+  await $.tool.call(STEPS as never)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  const long = 'the box grew with the text\nsecond line of a long note'
+  await ui.post({ note: 0, text: long }, { in: 'note:1:0' })
+  await ui.post({ press: 'send' }, { in: 'send' })
+  expect(seen.prompts[0]).toContain('(note: the box grew with the text second line of a long note)')
+  await $.tool.call(STEPS as never)
+  await ui.post({ press: 'send' }, { in: 'send' })
+  expect(seen.prompts[1]).not.toContain('note:')
 })

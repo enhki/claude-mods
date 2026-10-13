@@ -137,6 +137,9 @@ in chat, and you send the results back from there.
   **Pass** / **Fail** / **Skip** and a note. Marking it opens the next one;
   done steps fold to one line you can click to reopen. Pressing a mark again
   takes it back.
+- **Notes** on the desktop wrap and grow as you type (Enter starts a new
+  line); the desktop passes no paste to a pane, so type them. The terminal
+  keeps a one-line field.
 - **Keys** (terminal, once the pane has the keyboard): `p` pass, `f` fail,
   `s` skip, `c` copy, `r` send.
 - **Send results** submits one message: a tally, then each step as PASS,
