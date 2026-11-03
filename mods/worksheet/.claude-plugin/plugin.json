@@ -1,0 +1,25 @@
+{
+  "name": "worksheet",
+  "version": "0.1.0",
+  "description": "A pane over a JSON worksheet: rows grouped by section with search and filters, your priority and comment per row beside Claude's proposal and reason, written straight back to the file, with changes sent to Claude on demand or as they happen",
+  "author": {
+    "name": "enhki"
+  },
+  "repository": "https://github.com/enhki/claude-mods",
+  "license": "MIT",
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "worksheets": {
+      "type": "string",
+      "title": "Worksheet files",
+      "description": "Comma-separated paths of JSON worksheets, relative to the working directory. Empty reads .claude/worksheets.json ({\"worksheets\": [...]}) and otherwise lists docs/prd/*-worksheet.json.",
+      "default": ""
+    },
+    "notifyOnSave": {
+      "type": "boolean",
+      "title": "Tell Claude as changes are saved",
+      "description": "Send Claude a summary of saved changes after a short pause, instead of only when Send changes is pressed. The pane's Notify control toggles it for the session.",
+      "default": false
+    }
+  }
+}
