@@ -24,6 +24,16 @@
       "name": "walkthrough",
       "source": "./mods/walkthrough",
       "description": "A checklist pane for manual testing: Claude publishes the steps, you mark each one and send the results back"
+    },
+    {
+      "name": "reading",
+      "source": "./mods/reading",
+      "description": "A reading pane: Claude publishes documents, sections, issues and notes to read; you mark each read, acknowledged or to discuss, comment, and send the results back"
+    },
+    {
+      "name": "worksheet",
+      "source": "./mods/worksheet",
+      "description": "A pane over a JSON worksheet: your priority and comment per row beside Claude's proposal, written straight back to the file"
     }
   ]
 }
