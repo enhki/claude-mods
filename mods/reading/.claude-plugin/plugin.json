@@ -1,0 +1,19 @@
+{
+  "name": "reading",
+  "version": "0.1.0",
+  "description": "A reading pane: Claude publishes documents, sections, issues and notes to read, you mark each read, acknowledged or to discuss with a comment, and the results go back as one message",
+  "author": {
+    "name": "enhki"
+  },
+  "repository": "https://github.com/enhki/claude-mods",
+  "license": "MIT",
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "issueCommand": {
+      "type": "string",
+      "title": "Issue command",
+      "description": "Command that prints an issue, with {number} standing for the issue number and {repo} for owner/repo. Empty runs fgj against the git remote's host: fgj --hostname <host> issue view {number} -R {repo}.",
+      "default": ""
+    }
+  }
+}
