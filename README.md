@@ -314,7 +314,8 @@ Clone, then add the clone itself as your marketplace so edits are live after
 `/reload-plugins` with no reinstall:
 
 ```bash
-claude plugin marketplace add ~/repos/claude-mods
+git clone https://github.com/enhki/claude-mods.git
+claude plugin marketplace add ./claude-mods
 claude plugin install <mod>@claude-mods --scope user
 ```
 
