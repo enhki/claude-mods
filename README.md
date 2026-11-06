@@ -47,6 +47,8 @@ draws the first line it prints in the band above the prompt.
   and the two agree.
 - The model comes through as its ID, not its display name, and the effort appears
   once the session's first request has been sent.
+- The JSON also carries `surface: "app"`, which the terminal's does not. The app's
+  font has no Nerd Font glyphs, so a script can use this to draw plain text instead.
 
 ### forgejo-issues
 

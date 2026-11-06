@@ -106,6 +106,8 @@ export function buildInput(f: InputFacts): Record<string, unknown> {
   }
   return {
     hook_event_name: 'Status',
+    // Not in the terminal's JSON: what this draws is never in the terminal's font.
+    surface: 'app',
     session_id: f.sessionId,
     cwd: f.cwd,
     model: { id: f.model, display_name: f.model },

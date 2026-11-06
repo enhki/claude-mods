@@ -89,6 +89,11 @@ describe('buildInput', () => {
     expect('rate_limits' in input).toBe(false)
   })
 
+  test('says_the_line_is_for_the_app_so_a_script_can_drop_terminal_glyphs', async () => {
+    const usage = { startedAt: 0, context: { window: 1 }, rateLimits: [] }
+    expect(buildInput({ ...base, usage }).surface).toBe('app')
+  })
+
   test('session_length_counts_from_the_session_start', async () => {
     const usage = { startedAt: 1000, context: { window: 1 }, rateLimits: [] }
     expect(buildInput({ ...base, now: 61000, usage }).cost).toEqual({ total_duration_ms: 60000 })

@@ -1,6 +1,6 @@
 {
   "name": "statusline-desktop",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Runs your configured statusLine command and draws its line above the prompt in the Claude desktop app",
   "author": { "name": "enhki" },
   "repository": "https://github.com/enhki/claude-mods",
