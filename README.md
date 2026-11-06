@@ -25,6 +25,7 @@ loads in every session, desktop ones included.
 | [`walkthrough`](mods/walkthrough) | A checklist pane for testing by hand: mark each step, add notes, send the results back in one message |
 | [`reading`](mods/reading) | A reading pane: Claude publishes documents, sections, issues and notes to read; mark each read, acknowledged or to discuss, comment, send the results back |
 | [`worksheet`](mods/worksheet) | A pane over a JSON worksheet: your priority and comment per row beside Claude's proposal, written straight back to the file |
+| [`progress`](mods/progress) | A band above the prompt: the active plan's slice, the last honest check or build gate, the forge review queue, and tallies of a decision worksheet and a specification catalogue |
 
 ### statusline-desktop
 
@@ -212,6 +213,35 @@ A mod is a plugin of function hooks: a `plugin.json`, a `hooks/hooks.json`
 naming one TypeScript module, and that module's `register(on, options)`. In a
 Claude Code session, the bundled `plugin-authoring` skill holds the full API
 (types, examples, the test kit); load it before writing one.
+
+### progress
+
+A band above the prompt with four readings, each left out when its source is
+absent, so a project configures only what it has:
+
+- **Plan:** the Markdown plans in a folder (default `context/plans`), each with
+  frontmatter and a slice table whose header has `#`, `Slice` and `Status`
+  columns. The plan whose frontmatter says `status: active` is shown: its current
+  slice (`Status` is `current`), the done tally and the next `G<n>` gate row.
+  Several active plans are flagged; none shows "no active plan". A project with
+  one plan names it in **Single plan file** instead.
+- **Gate:** the last run of each command matching **Gate commands** (by default
+  `cabal build`, `cabal test` and a `scripts/check*` script at command position),
+  with its real exit status. A pipe without `pipefail` makes the status
+  unverifiable and the band says so; tasty and unittest summaries give the test
+  counts; `scripts/check`'s stage summary and the profile runner's verdict line
+  are quoted. Up to three gates stay, with the commit and worktree of the last.
+- **Queue:** open issues carrying **Review queue label** (default `status/review`)
+  and open pull requests, through `fgj` against the forge and repository read
+  from the origin remote (or set explicitly), refreshed every ten minutes and
+  after a command that edits labels or merges.
+- **Maps:** a JSON worksheet in the `worksheet` mod's shape, tallied by priority
+  with undecided rows and overrides of the proposals; and a specification
+  catalogue, tallied by each specification's frontmatter status with its area
+  count. Both are off until their paths are set.
+
+Readings refresh at session start and after each turn of the main
+conversation. Nothing here changes a command or a file.
 
 ### Where it lives
 
