@@ -59,8 +59,8 @@ test('gate_names_come_from_cabal_and_the_check_scripts', () => {
   expect(gateName('cabal test > t.log 2>&1; echo $?', GATE)).toBe('cabal test')
   expect(gateName('cabal v2-build all --ghc-options=-Werror', GATE)).toBe('cabal build')
   expect(gateName('./scripts/check', GATE)).toBe('check')
-  expect(gateName('cd /r && ILLUSION_CACHE=/x ./scripts/check-forge 2>&1 | tail -5', GATE)).toBe('check-forge')
-  expect(gateName('scripts/check-illusion run --tier deterministic --output o', GATE)).toBe('check-illusion')
+  expect(gateName('cd /r && CACHE_DIR=/x ./scripts/check-forge 2>&1 | tail -5', GATE)).toBe('check-forge')
+  expect(gateName('scripts/check-profile run --tier deterministic --output o', GATE)).toBe('check-profile')
   expect(gateName('git status', GATE)).toBe(null)
   expect(gateName('cat scripts/check-forge', GATE)).toBe(null)
   expect(gateName('time ./scripts/check test', GATE)).toBe('check')
@@ -103,22 +103,22 @@ test('a_gate_reads_its_outcome_and_words_itself', () => {
   expect(verdict(failed)).toBe('fail')
   expect(gateText(failed)).toBe('check ExitFailure 1 exit 1')
 
-  const tests = gate('cabal test', 'cd ../FTWH-claude && cabal test 2>&1 > t.log; echo $?', 'All 10 tests passed\n0', false, 'abc', 5, GATE)
+  const tests = gate('cabal test', 'cd ../project-wt && cabal test 2>&1 > t.log; echo $?', 'All 10 tests passed\n0', false, 'abc', 5, GATE)
   expect(gateText(tests)).toBe('tests 10/10')
-  expect(tests.where).toBe('FTWH-claude')
+  expect(tests.where).toBe('project-wt')
 
   const piped = gate('cabal build', 'cabal build all --ghc-options=-Werror | tail', '', false, '', 0, GATE)
   expect(verdict(piped)).toBe('unknown')
   expect(gateText(piped)).toBe('build -Werror (piped, exit unverified)')
 
-  const runner = gate('check-illusion', 'scripts/check-illusion run --tier deterministic --output o', RUNNER_OUTPUT, true, '', 0, GATE)
-  expect(gateText(runner)).toBe('check-illusion profile partial exit 1')
+  const runner = gate('check-profile', 'scripts/check-profile run --tier deterministic --output o', RUNNER_OUTPUT, true, '', 0, GATE)
+  expect(gateText(runner)).toBe('check-profile profile partial exit 1')
   expect(verdict(runner)).toBe('fail')
 })
 
 test('the_worksheet_tally_counts_choices_open_rows_and_overrides', () => {
-  expect(sheetSummary(WORKSHEET, 'XEP')).toEqual({
-    label: 'XEP',
+  expect(sheetSummary(WORKSHEET, 'caps')).toEqual({
+    label: 'caps',
     counts: [
       { choice: 'must', n: 1 },
       { choice: 'needed', n: 1 },
@@ -128,26 +128,27 @@ test('the_worksheet_tally_counts_choices_open_rows_and_overrides', () => {
     open: 1,
     overrides: 1,
   })
-  expect(sheetSummary('not json', 'XEP')).toBe(null)
-  expect(sheetSummary('{"rows":[]}', 'XEP')).toBe(null)
+  expect(sheetSummary('not json', 'caps')).toBe(null)
+  expect(sheetSummary('{"rows":[]}', 'caps')).toBe(null)
 })
 
 test('the_catalogue_tally_ranks_specification_statuses', () => {
   const cat = catalogueSpecs(CATALOGUE)
-  expect(cat).toEqual({ paths: ['docs/specs/ILE-EXT-0001.md', 'docs/specs/ILE-OPS-0001.md', 'docs/specs/ILE-ZZZ-0001.md'], areas: 3 })
-  const specs = specsSummary(cat!.paths, cat!.areas, { 'docs/specs/ILE-EXT-0001.md': 'draft', 'docs/specs/ILE-OPS-0001.md': 'draft', 'docs/specs/ILE-ZZZ-0001.md': 'external' }, 'ILE')
-  expect(specs).toEqual({ label: 'ILE', total: 3, statuses: [{ status: 'draft', n: 2 }, { status: 'external', n: 1 }], areas: 3 })
+  expect(cat).toEqual({ paths: ['docs/specs/SPEC-A-0001.md', 'docs/specs/SPEC-B-0001.md', 'docs/specs/EXTERNAL-0001.md'], areas: 3 })
+  const specs = specsSummary(cat!.paths, cat!.areas, { 'docs/specs/SPEC-A-0001.md': 'draft', 'docs/specs/SPEC-B-0001.md': 'draft', 'docs/specs/EXTERNAL-0001.md': 'external' }, 'specs')
+  expect(specs).toEqual({ label: 'specs', total: 3, statuses: [{ status: 'draft', n: 2 }, { status: 'external', n: 1 }], areas: 3 })
   expect(catalogueSpecs('[]')).toEqual({ paths: [], areas: 0 })
 })
 
 test('forge_lists_remotes_and_the_commands_that_change_the_queue', () => {
   expect(listedNumbers('NUMBER  TITLE\n#164    assess   open\n#150    review  open\n\nShowing page 1')).toEqual([164, 150])
-  expect(listedNumbers('No open pull requests in Enunki/illusion-lab')).toEqual([])
-  expect(touchesQueue('afj issue edit 150 --remove-label status/review')).toBe(true)
-  expect(touchesQueue('afj pr merge 169 --merge-method rebase -R Enunki/illusion-lab')).toBe(true)
-  expect(touchesQueue('afj issue list -R Enunki/illusion-lab')).toBe(false)
-  expect(parseRemote('ssh://git@git.abzu.dev:2222/Enunki/illusion-lab.git')).toEqual({ host: 'git.abzu.dev', owner: 'Enunki', repo: 'illusion-lab' })
-  expect(parseRemote('git@github.com:enhki/claude-mods.git')).toEqual({ host: 'github.com', owner: 'enhki', repo: 'claude-mods' })
+  expect(listedNumbers('No open pull requests in example/project')).toEqual([])
+  expect(touchesQueue('fgj issue edit 150 --remove-label status/review')).toBe(true)
+  expect(touchesQueue('gh pr merge 169 --rebase')).toBe(true)
+  expect(touchesQueue('myforge pr close 7')).toBe(true)
+  expect(touchesQueue('fgj issue list -R example/project')).toBe(false)
+  expect(parseRemote('ssh://git@forge.example:2222/example/project.git')).toEqual({ host: 'forge.example', owner: 'example', repo: 'project' })
+  expect(parseRemote('git@github.com:someone/thing.git')).toEqual({ host: 'github.com', owner: 'someone', repo: 'thing' })
   expect(parseRemote('not a remote')).toBe(null)
 })
 

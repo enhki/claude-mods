@@ -164,7 +164,7 @@ export function testCounts(output: string): { total: number; failed: number } | 
   return counts
 }
 
-/** The command's own verdict line, when it prints one: scripts/check's stage summary or the profile runner's. */
+/** The command's own verdict line, when it prints one: a check script's stage summary or a conformance runner's verdict. */
 export function summaryLine(output: string): string {
   const check = [...output.matchAll(/Requested checks complete: (ExitSuccess|ExitFailure \d+)/g)].pop()
   if (check?.[1]) return check[1]
@@ -216,9 +216,9 @@ export function listedNumbers(stdout: string): number[] {
   return [...stdout.matchAll(/^#(\d+)\s/gm)].map(m => Number(m[1]))
 }
 
-/** Whether a command changed what the queue lists (labels, closes, merges). */
+/** Whether a forge command changed what the queue lists (labels, closes, merges), whatever CLI or alias ran it. */
 export function touchesQueue(command: string): boolean {
-  return /\b(?:afj|fgj)\b[^\n]*\b(?:issue\s+(?:edit|close|reopen)|pr\s+(?:merge|close|create))\b/.test(command)
+  return /\b[a-z][\w-]*\s+(?:issue\s+(?:edit|close|reopen)|pr\s+(?:merge|close|create))\b/.test(command)
 }
 
 export function queueText(nums: number[], max = 3): string {

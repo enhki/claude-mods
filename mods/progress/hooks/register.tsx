@@ -166,7 +166,7 @@ async function forgeTarget($: $, o: Settings): Promise<Forge | null> {
   return host && repo ? { host, repo } : null
 }
 
-// afj is a shell alias, and a process runs no shell: call what it stands for.
+// A process runs no shell, so a user's alias for fgj would not resolve: call fgj itself.
 async function forgeList($: $, forge: Forge, args: string[]): Promise<number[]> {
   const r = await $.process.run(['fgj', '--hostname', forge.host, ...args, '-R', forge.repo], { timeoutMs: 45_000 })
   if (r.exitCode !== 0) throw new Error(r.stderr.trim().split('\n').pop() || `exit ${r.exitCode}`)

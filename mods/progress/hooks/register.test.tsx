@@ -9,12 +9,12 @@ const BAND = {
   props: { hasSurvey: false, isWorking: false, maxRows: 10, bodyColumns: 200 } as never,
 } as const
 
-const LAB = {
+const CONFIGURED = {
   options: {
-    worksheet: 'docs/prd/messaging-capability-worksheet.json',
-    worksheetLabel: 'XEP',
+    worksheet: 'docs/worksheet.json',
+    worksheetLabel: 'caps',
     catalogue: 'docs/specs/catalogue.json',
-    catalogueLabel: 'ILE',
+    catalogueLabel: 'specs',
   },
 }
 
@@ -30,16 +30,16 @@ function fakeEngine(on: On, opts: { forgeFails?: boolean | (() => boolean); noPl
     }
     throw new Error('missing')
   })
-  on('fs.exists', ($, e) => ({ value: !e.path.includes('ZZZ') }) as never)
+  on('fs.exists', ($, e) => ({ value: !e.path.includes('EXTERNAL') }) as never)
   on('fs.read', ($, e) => {
     const files: Record<string, string> = {
       'context/plans/README.md': README,
       'context/plans/solo.md': PARKED_PLAN,
       'context/plans/stocktake.md': ACTIVE_PLAN,
-      'docs/prd/messaging-capability-worksheet.json': WORKSHEET,
+      'docs/worksheet.json': WORKSHEET,
       'docs/specs/catalogue.json': CATALOGUE,
-      'docs/specs/ILE-EXT-0001.md': SPEC_DRAFT,
-      'docs/specs/ILE-OPS-0001.md': SPEC_ACCEPTED,
+      'docs/specs/SPEC-A-0001.md': SPEC_DRAFT,
+      'docs/specs/SPEC-B-0001.md': SPEC_ACCEPTED,
     }
     const text = Object.entries(files).find(([name]) => e.path.endsWith(name))?.[1]
     if (text === undefined) throw new Error('missing')
@@ -48,12 +48,12 @@ function fakeEngine(on: On, opts: { forgeFails?: boolean | (() => boolean); noPl
   on('process.run', ($, e) => {
     runs.push([...e.argv])
     const out = (stdout: string, exitCode = 0) => ({ value: { exitCode, stdout, stderr: exitCode ? 'connection refused' : '' } }) as never
-    if (e.argv[0] === 'git' && e.argv[1] === 'remote') return out('ssh://git@git.abzu.dev:2222/Enunki/illusion-lab.git\n')
+    if (e.argv[0] === 'git' && e.argv[1] === 'remote') return out('ssh://git@forge.example:2222/example/project.git\n')
     if (e.argv[0] === 'git') return out('abc1234\n')
     const failing = typeof opts.forgeFails === 'function' ? opts.forgeFails() : opts.forgeFails === true
     if (failing) return out('', 1)
     if (e.argv.includes('issue')) return out('NUMBER  TITLE\n#150    review the contract   open\n#18     coordinate   open\n')
-    return out('No open pull requests in Enunki/illusion-lab\n')
+    return out('No open pull requests in example/project\n')
   })
   on('tool.call', { tool: 'Bash' }, () => ({ result: { stdout: '' }, text: CHECK_OUTPUT }) as never)
   on('session.start', ($, e) => ({ cwd: e.cwd }) as never)
@@ -83,7 +83,7 @@ async function eventually(ui: Findable, text: RegExp): Promise<unknown> {
 }
 
 for (const surface of ['terminal', 'desktop'] as const) {
-  test(`${surface}_shows_the_active_plan_the_maps_and_the_queue_after_start`, LAB, async ($, on) => {
+  test(`${surface}_shows_the_active_plan_the_maps_and_the_queue_after_start`, CONFIGURED, async ($, on) => {
     fakeEngine(on)
     await $.session.start(START)
     const ui = await $.ui.mount({ ...BAND, surface })
@@ -96,7 +96,7 @@ for (const surface of ['terminal', 'desktop'] as const) {
     expect(await ui.find({ text: 'beneath' })).toBeDefined()
   })
 
-  test(`${surface}_a_check_run_becomes_the_gate_line`, LAB, async ($, on) => {
+  test(`${surface}_a_check_run_becomes_the_gate_line`, CONFIGURED, async ($, on) => {
     fakeEngine(on)
     await $.session.start(START)
     await $.tool.call({ tool: 'Bash', command: './scripts/check' } as never)
@@ -106,7 +106,7 @@ for (const surface of ['terminal', 'desktop'] as const) {
   })
 }
 
-test('other_commands_leave_the_gate_alone', LAB, async ($, on) => {
+test('other_commands_leave_the_gate_alone', CONFIGURED, async ($, on) => {
   fakeEngine(on)
   await $.session.start(START)
   await $.tool.call({ tool: 'Bash', command: 'git status' } as never)
@@ -114,7 +114,7 @@ test('other_commands_leave_the_gate_alone', LAB, async ($, on) => {
   expect(await ui.find({ text: /ExitSuccess/ })).toBeUndefined()
 })
 
-test('a_forge_that_never_answered_stays_out_and_the_band_still_draws', LAB, async ($, on) => {
+test('a_forge_that_never_answered_stays_out_and_the_band_still_draws', CONFIGURED, async ($, on) => {
   fakeEngine(on, { forgeFails: true })
   await $.session.start(START)
   const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
@@ -124,23 +124,23 @@ test('a_forge_that_never_answered_stays_out_and_the_band_still_draws', LAB, asyn
   expect(await ui.find({ text: /PRs/ })).toBeUndefined()
 })
 
-test('a_forge_that_answered_before_says_when_a_refresh_fails', LAB, async ($, on) => {
+test('a_forge_that_answered_before_says_when_a_refresh_fails', CONFIGURED, async ($, on) => {
   const state = { fail: false }
   fakeEngine(on, { forgeFails: () => state.fail })
   await $.session.start(START)
   const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
   expect(await eventually(ui, /2 #150 #18/)).toBeDefined()
   state.fail = true
-  await $.tool.call({ tool: 'Bash', command: 'afj pr merge 169 -R Enunki/illusion-lab' } as never)
+  await $.tool.call({ tool: 'Bash', command: 'fgj pr merge 169 -R example/project' } as never)
   expect(await eventually(ui, /forge: connection refused/)).toBeDefined()
   expect(await ui.find({ text: /2 #150 #18/ })).toBeDefined()
 })
 
-test('a_label_edit_refreshes_the_queue', LAB, async ($, on) => {
+test('a_label_edit_refreshes_the_queue', CONFIGURED, async ($, on) => {
   const runs = fakeEngine(on)
   await $.session.start(START)
   const before = runs.filter(r => r[0] === 'fgj').length
-  await $.tool.call({ tool: 'Bash', command: 'afj issue edit 150 -R Enunki/illusion-lab --remove-label status/review' } as never)
+  await $.tool.call({ tool: 'Bash', command: 'fgj issue edit 150 -R example/project --remove-label status/review' } as never)
   expect(runs.filter(r => r[0] === 'fgj').length).toBe(before + 2)
 })
 
@@ -149,6 +149,6 @@ test('without_a_plans_folder_or_maps_the_band_keeps_only_what_it_has', async ($,
   await $.session.start(START)
   const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
   expect(await ui.find({ text: /slice/ })).toBeUndefined()
-  expect(await ui.find({ text: /XEP/ })).toBeUndefined()
+  expect(await ui.find({ text: /caps/ })).toBeUndefined()
   expect(await eventually(ui, /review 2/)).toBeDefined()
 })

@@ -1,6 +1,6 @@
 /** One gate: a build, test or check command the band watched, as its Bash call showed it. */
 export type Gate = {
-  /** The command's short name: `cabal build`, `cabal test`, `check`, `check-forge`, `check-illusion`. */
+  /** The command's short name: `cabal build`, `cabal test`, `check`, `check-forge`. */
   name: string
   /** The real exit status; null when a pipe hid it (no pipefail, no PIPESTATUS). */
   exit: number | null

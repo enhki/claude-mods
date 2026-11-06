@@ -10,9 +10,9 @@ export const ACTIVE_PLAN = [
   '',
   '| # | Slice | Depends on | Status |',
   '|---|-------|------------|--------|',
-  '| 1 | **Land the held baseline.** #154 then #153 | — | done #169 |',
+  '| 1 | **Land the held branch.** #12 then #13 | — | done #19 |',
   '| 2 | **Progress mod**, a band for plans, gates and maps | 1 | current |',
-  '| 3 | **Solo experiment brief** under #147 and #24 | 2 | |',
+  '| 3 | **Experiment brief** under #14 and #24 | 2 | |',
   '| 4 | **G1 review gate** (a short session) | 3 | |',
 ].join('\n')
 
@@ -42,22 +42,22 @@ export const WORKSHEET = JSON.stringify({
 
 export const CATALOGUE = JSON.stringify({
   schema_version: 1,
-  canonical_repository: 'Enunki/illusion-lab',
+  canonical_repository: 'example/project',
   areas: { KRN: { title: 'Kernel' }, MSG: { title: 'Messaging' }, OPS: { title: 'Operations' } },
   specifications: [
-    { id: 'ILE-EXT-0001', repository: 'Enunki/illusion-lab', path: 'docs/specs/ILE-EXT-0001.md', version: '0.1.0' },
-    { id: 'ILE-OPS-0001', repository: 'Enunki/illusion-lab', path: 'docs/specs/ILE-OPS-0001.md', version: '0.1.0' },
-    { id: 'ILE-ZZZ-0001', repository: 'Other/repo', path: 'docs/specs/ILE-ZZZ-0001.md', version: '0.1.0' },
+    { id: 'SPEC-A-0001', repository: 'example/project', path: 'docs/specs/SPEC-A-0001.md', version: '0.1.0' },
+    { id: 'SPEC-B-0001', repository: 'example/project', path: 'docs/specs/SPEC-B-0001.md', version: '0.1.0' },
+    { id: 'SPEC-C-0001', repository: 'other/repo', path: 'docs/specs/EXTERNAL-0001.md', version: '0.1.0' },
   ],
 })
 
-export const SPEC_DRAFT = '---\nid: ILE-EXT-0001\nstatus: draft\n---\n# Spec\n'
-export const SPEC_ACCEPTED = '---\nid: ILE-OPS-0001\nstatus: accepted\n---\n# Spec\n'
+export const SPEC_DRAFT = '---\nid: SPEC-A-0001\nstatus: draft\n---\n# Spec\n'
+export const SPEC_ACCEPTED = '---\nid: SPEC-B-0001\nstatus: accepted\n---\n# Spec\n'
 
 export const CHECK_OUTPUT = [
   '=== Test ===',
   'All 462 tests passed (3.82s)',
-  'Test suite xmpp-tests: PASS',
+  'Test suite core-tests: PASS',
   'All 21 tests passed (0.08s)',
   'Test: ExitSuccess',
   'Docs: ExitSuccess',
@@ -81,7 +81,7 @@ export const APPLICATION_OUTPUT = [
 export const RUNNER_OUTPUT = [
   'RUN runner-tests (deterministic; 120s limit)',
   'PASS runner-tests',
-  'R009 pass: Fresh evidence, explicit gaps and owned processes',
+  'R009 pass: Fresh evidence and explicit gaps',
   'Selected checks passed: True; application profile: partial',
   'Report: /tmp/x/report.json',
 ].join('\n')
