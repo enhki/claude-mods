@@ -32,7 +32,8 @@ loads in every session, desktop ones included.
 The desktop app doesn't run your `statusLine` command. This mod does: it picks
 the command the way Claude Code does (project `.claude/settings.local.json`,
 then `.claude/settings.json`, then `~/.claude/settings.json`), pipes it the same
-JSON the terminal would (model, cwd, cost, context window, rate limits), and
+JSON the terminal would (model, cwd, effort, cost, session length, context
+window, rate limits), and
 draws the first line it prints in the band above the prompt.
 
 - ANSI colours keep the terminal's palette when ghostty's config (and the files
@@ -42,7 +43,10 @@ draws the first line it prints in the band above the prompt.
 - Stays out of the terminal, which already draws the real status line.
 - Only the input side of the context window is known to mods, so a token count
   your script sums from `current_usage` reads slightly lower than in the
-  terminal (output tokens come through as 0).
+  terminal (output tokens come through as 0). Leave output tokens out of the sum
+  and the two agree.
+- The model comes through as its ID, not its display name, and the effort appears
+  once the session's first request has been sent.
 
 ### forgejo-issues
 

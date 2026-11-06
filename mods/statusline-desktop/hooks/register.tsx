@@ -14,6 +14,7 @@ let isRunning = false
 let isPending = false
 let home: string | null = null
 let configHome: string | null = null
+let effort: string | number | undefined
 
 async function readOrNull($: $, path: string): Promise<string | null> {
   try {
@@ -45,13 +46,14 @@ async function terminalPalette($: $, h: string): Promise<string[]> {
 }
 
 async function runOnce($: $): Promise<void> {
-  const [sessionId, cwd, root, model, version, usage, h] = await Promise.all([
+  const [sessionId, cwd, root, model, version, usage, now, h] = await Promise.all([
     $.session.id(),
     $.session.cwd(),
     $.session.root(),
     $.session.model(),
     $.session.version(),
     $.session.usage(),
+    $.clock.now(),
     homeDir($),
   ])
   const command = pickCommand(
@@ -65,7 +67,7 @@ async function runOnce($: $): Promise<void> {
     await update($, line, () => null)
     return
   }
-  const stdin = JSON.stringify(buildInput({ sessionId, cwd, root, model, version: version.version, usage }))
+  const stdin = JSON.stringify(buildInput({ sessionId, cwd, root, model, version: version.version, usage, now, effort }))
   const { exitCode, stdout } = await $.process.run(['bash', '-c', command], { cwd, stdin, timeoutMs: 10_000 })
   if (exitCode !== 0 && stdout.trim() === '') return
   const palette = await terminalPalette($, h)
@@ -98,6 +100,12 @@ export const register: Register = on => {
     void refresh($)
     $.clock.every(TICK_MS, () => void refresh($))
     return result
+  })
+
+  // The engine has no call for the effort, so keep what the main loop last asked for.
+  on('turn.step', async function* ($, e, next) {
+    if (e.agentId === undefined) effort = e.effort
+    return yield* next(e)
   })
 
   on('turn.complete', async ($, e, next) => {

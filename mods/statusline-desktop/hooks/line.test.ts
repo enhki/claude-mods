@@ -63,7 +63,7 @@ describe('ghosttyIncludes', () => {
 })
 
 describe('buildInput', () => {
-  const base = { sessionId: 's', cwd: '/r', root: '/r', model: 'Opus', version: '2.1' }
+  const base = { sessionId: 's', cwd: '/r', root: '/r', model: 'Opus', version: '2.1', now: 0 }
 
   test('carries_cost_context_and_limits_in_statusline_shape', async () => {
     const input = buildInput({
@@ -84,8 +84,24 @@ describe('buildInput', () => {
 
   test('fresh_session_leaves_unknown_figures_out', async () => {
     const input = buildInput({ ...base, usage: { startedAt: 0, context: { window: 200000 }, rateLimits: [] } })
-    expect('cost' in input).toBe(false)
+    expect(input.cost).toEqual({ total_duration_ms: 0 })
+    expect('effort' in input).toBe(false)
     expect('rate_limits' in input).toBe(false)
+  })
+
+  test('session_length_counts_from_the_session_start', async () => {
+    const usage = { startedAt: 1000, context: { window: 1 }, rateLimits: [] }
+    expect(buildInput({ ...base, now: 61000, usage }).cost).toEqual({ total_duration_ms: 60000 })
+  })
+
+  test('a_clock_behind_the_start_reads_zero', async () => {
+    const usage = { startedAt: 5000, context: { window: 1 }, rateLimits: [] }
+    expect(buildInput({ ...base, now: 1000, usage }).cost).toEqual({ total_duration_ms: 0 })
+  })
+
+  test('effort_is_passed_in_statusline_shape', async () => {
+    const usage = { startedAt: 0, context: { window: 1 }, rateLimits: [] }
+    expect(buildInput({ ...base, effort: 'high', usage }).effort).toEqual({ level: 'high' })
   })
 })
 

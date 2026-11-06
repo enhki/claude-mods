@@ -88,6 +88,10 @@ export type InputFacts = {
   model: string
   version: string
   usage: SessionUsage
+  /** The clock now, in the milliseconds of `usage.startedAt`. */
+  now: number
+  /** The main loop's last effort; absent before its first request or for a model without one. */
+  effort?: string | number
 }
 
 /** The JSON Claude Code pipes to a statusLine command, built from `$.session`. */
@@ -107,7 +111,11 @@ export function buildInput(f: InputFacts): Record<string, unknown> {
     model: { id: f.model, display_name: f.model },
     workspace: { current_dir: f.cwd, project_dir: f.root },
     version: f.version,
-    ...(cost ? { cost: { total_cost_usd: cost.usd } } : {}),
+    cost: {
+      ...(cost ? { total_cost_usd: cost.usd } : {}),
+      total_duration_ms: Math.max(0, f.now - f.usage.startedAt),
+    },
+    ...(f.effort !== undefined ? { effort: { level: f.effort } } : {}),
     context_window: {
       context_window_size: context.window,
       ...(context.tokens !== undefined
