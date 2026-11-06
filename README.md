@@ -207,13 +207,6 @@ press **Send changes**, or by themselves a few seconds after each save when
 **Settings:** `worksheets` (comma-separated paths, default empty) and
 `notifyOnSave` (default off).
 
-## Writing a mod
-
-A mod is a plugin of function hooks: a `plugin.json`, a `hooks/hooks.json`
-naming one TypeScript module, and that module's `register(on, options)`. In a
-Claude Code session, the bundled `plugin-authoring` skill holds the full API
-(types, examples, the test kit); load it before writing one.
-
 ### progress
 
 A band above the prompt with four readings, each left out when its source is
@@ -229,8 +222,8 @@ absent, so a project configures only what it has:
   `cabal build`, `cabal test` and a `scripts/check*` script at command position),
   with its real exit status. A pipe without `pipefail` makes the status
   unverifiable and the band says so; tasty and unittest summaries give the test
-  counts; `scripts/check`'s stage summary and the profile runner's verdict line
-  are quoted. Up to three gates stay, with the commit and worktree of the last.
+  counts; a check script's stage summary and a conformance runner's verdict
+  line are quoted. Up to three gates stay, with the commit and worktree of the last.
 - **Queue:** open issues carrying **Review queue label** (default `status/review`)
   and open pull requests, through `fgj` against the forge and repository read
   from the origin remote (or set explicitly), refreshed every ten minutes and
@@ -244,6 +237,13 @@ absent, so a project configures only what it has:
 
 Readings refresh at session start and after each turn of the main
 conversation. Nothing here changes a command or a file.
+
+## Writing a mod
+
+A mod is a plugin of function hooks: a `plugin.json`, a `hooks/hooks.json`
+naming one TypeScript module, and that module's `register(on, options)`. In a
+Claude Code session, the bundled `plugin-authoring` skill holds the full API
+(types, examples, the test kit); load it before writing one.
 
 ### Where it lives
 
