@@ -234,7 +234,9 @@ absent, so a project configures only what it has:
 - **Queue:** open issues carrying **Review queue label** (default `status/review`)
   and open pull requests, through `fgj` against the forge and repository read
   from the origin remote (or set explicitly), refreshed every ten minutes and
-  after a command that edits labels or merges.
+  after a command that edits labels or merges. A forge that never answered, a
+  GitHub remote for one, stays out of the band; one that answered before keeps
+  its lists and says when a refresh fails.
 - **Maps:** a JSON worksheet in the `worksheet` mod's shape, tallied by priority
   with undecided rows and overrides of the proposals; and a specification
   catalogue, tallied by each specification's frontmatter status with its area

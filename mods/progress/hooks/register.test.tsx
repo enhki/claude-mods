@@ -19,7 +19,7 @@ const LAB = {
 }
 
 // The engine beneath the mod: the plans folder, the maps, git, the forge and a Bash tool.
-function fakeEngine(on: On, opts: { forgeFails?: boolean; noPlans?: boolean } = {}): string[][] {
+function fakeEngine(on: On, opts: { forgeFails?: boolean | (() => boolean); noPlans?: boolean } = {}): string[][] {
   const runs: string[][] = []
   mock.clock(on)
   on('fs.list', ($, e) => {
@@ -50,7 +50,8 @@ function fakeEngine(on: On, opts: { forgeFails?: boolean; noPlans?: boolean } = 
     const out = (stdout: string, exitCode = 0) => ({ value: { exitCode, stdout, stderr: exitCode ? 'connection refused' : '' } }) as never
     if (e.argv[0] === 'git' && e.argv[1] === 'remote') return out('ssh://git@git.abzu.dev:2222/Enunki/illusion-lab.git\n')
     if (e.argv[0] === 'git') return out('abc1234\n')
-    if (opts.forgeFails) return out('', 1)
+    const failing = typeof opts.forgeFails === 'function' ? opts.forgeFails() : opts.forgeFails === true
+    if (failing) return out('', 1)
     if (e.argv.includes('issue')) return out('NUMBER  TITLE\n#150    review the contract   open\n#18     coordinate   open\n')
     return out('No open pull requests in Enunki/illusion-lab\n')
   })
@@ -113,12 +114,26 @@ test('other_commands_leave_the_gate_alone', LAB, async ($, on) => {
   expect(await ui.find({ text: /ExitSuccess/ })).toBeUndefined()
 })
 
-test('a_forge_failure_is_said_and_the_band_still_draws', LAB, async ($, on) => {
+test('a_forge_that_never_answered_stays_out_and_the_band_still_draws', LAB, async ($, on) => {
   fakeEngine(on, { forgeFails: true })
   await $.session.start(START)
   const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
-  expect(await eventually(ui, /forge: connection refused/)).toBeDefined()
   expect(await ui.find({ text: /slice 2/ })).toBeDefined()
+  expect(await eventually(ui, /must 1/)).toBeDefined()
+  expect(await ui.find({ text: /forge:/ })).toBeUndefined()
+  expect(await ui.find({ text: /PRs/ })).toBeUndefined()
+})
+
+test('a_forge_that_answered_before_says_when_a_refresh_fails', LAB, async ($, on) => {
+  const state = { fail: false }
+  fakeEngine(on, { forgeFails: () => state.fail })
+  await $.session.start(START)
+  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect(await eventually(ui, /2 #150 #18/)).toBeDefined()
+  state.fail = true
+  await $.tool.call({ tool: 'Bash', command: 'afj pr merge 169 -R Enunki/illusion-lab' } as never)
+  expect(await eventually(ui, /forge: connection refused/)).toBeDefined()
+  expect(await ui.find({ text: /2 #150 #18/ })).toBeDefined()
 })
 
 test('a_label_edit_refreshes_the_queue', LAB, async ($, on) => {

@@ -188,9 +188,11 @@ async function refreshQueue($: $, forge: Forge | null, o: Settings): Promise<voi
     ])
     await setQueue($, () => ({ review, prs, error: '', checkedAt: at }))
   } catch (err) {
-    // The forge is flaky: keep the last lists and say the refresh failed.
+    // A forge that never answered stays out of the band: a GitHub remote, or fgj
+    // without this host. One that answered before keeps its lists and says the
+    // refresh failed.
     const error = err instanceof Error ? err.message : String(err)
-    await setQueue($, q => ({ ...q, error: error || 'unreachable', checkedAt: at }))
+    await setQueue($, q => (q.checkedAt === null ? q : { ...q, error: error || 'unreachable', checkedAt: at }))
   }
 }
 
