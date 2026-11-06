@@ -34,6 +34,11 @@
       "name": "worksheet",
       "source": "./mods/worksheet",
       "description": "A pane over a JSON worksheet: your priority and comment per row beside Claude's proposal, written straight back to the file"
+    },
+    {
+      "name": "progress",
+      "source": "./mods/progress",
+      "description": "A progress band above the prompt: the active plan's slice, the last honest check or build gate, the forge review queue, and tallies of a decision worksheet and a specification catalogue"
     }
   ]
 }

@@ -1,0 +1,73 @@
+{
+  "name": "progress",
+  "version": "0.1.0",
+  "description": "A progress band above the prompt: the active plan's slice, the last honest check or build gate, the forge review queue, and tallies of a decision worksheet and a specification catalogue",
+  "author": {
+    "name": "enhki"
+  },
+  "repository": "https://github.com/enhki/claude-mods",
+  "license": "MIT",
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "planDir": {
+      "type": "string",
+      "title": "Plans folder",
+      "description": "Folder of Markdown plans, each with a slice table (columns #, Slice, Status) and frontmatter; the plan whose frontmatter says status: active is the one shown.",
+      "default": "context/plans"
+    },
+    "plan": {
+      "type": "string",
+      "title": "Single plan file",
+      "description": "One plan file to show instead of scanning the folder, for a project that keeps a single plan.",
+      "default": ""
+    },
+    "gatePattern": {
+      "type": "string",
+      "title": "Gate commands",
+      "description": "Regular expression for the Bash commands whose real outcome the band keeps as the last gate.",
+      "default": "\\bcabal\\s+(?:v2-)?(?:build|test)\\b|(?:^|[;&|(]\\s*|\\n\\s*)(?:[A-Za-z_][A-Za-z0-9_]*=\\S*\\s+)*(?:(?:time|exec|nohup)\\s+)?(?:\\./)?scripts/check(?:-[a-z-]+)?\\b"
+    },
+    "queueLabel": {
+      "type": "string",
+      "title": "Review queue label",
+      "description": "The forge label whose open issues are the review queue, listed with open pull requests.",
+      "default": "status/review"
+    },
+    "forgeRepo": {
+      "type": "string",
+      "title": "Forge repository",
+      "description": "owner/repo on the forge; empty reads it from the origin remote.",
+      "default": ""
+    },
+    "forgeHost": {
+      "type": "string",
+      "title": "Forge host",
+      "description": "The Forgejo host for fgj; empty reads it from the origin remote.",
+      "default": ""
+    },
+    "worksheet": {
+      "type": "string",
+      "title": "Decision worksheet",
+      "description": "A JSON worksheet in the worksheet mod's shape; the band tallies its priorities, undecided rows and overrides of the proposals. Empty hides the tally.",
+      "default": ""
+    },
+    "worksheetLabel": {
+      "type": "string",
+      "title": "Worksheet label",
+      "description": "The word the band uses for the worksheet tally.",
+      "default": "sheet"
+    },
+    "catalogue": {
+      "type": "string",
+      "title": "Specification catalogue",
+      "description": "A catalogue JSON with specifications (path) and areas; the band tallies the specifications by their frontmatter status. Empty hides the tally.",
+      "default": ""
+    },
+    "catalogueLabel": {
+      "type": "string",
+      "title": "Catalogue label",
+      "description": "The word the band uses for the specification tally.",
+      "default": "specs"
+    }
+  }
+}
