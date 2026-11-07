@@ -28,12 +28,12 @@
     {
       "name": "reading",
       "source": "./mods/reading",
-      "description": "A reading pane: Claude publishes documents, sections, issues and notes to read; you mark each read, acknowledged or to discuss, comment, and send the results back"
+      "description": "A reading pane: Claude publishes documents, sections, issues and notes to read; you mark each read, acknowledged, agreed or to discuss, comment, and send the results back"
     },
     {
       "name": "worksheet",
       "source": "./mods/worksheet",
-      "description": "A pane over a JSON worksheet: your priority and comment per row beside Claude's proposal, written straight back to the file"
+      "description": "A pane over a JSON worksheet, with a tab per worksheet found: your priority and comment per row beside Claude's proposal, written straight back to the file"
     },
     {
       "name": "progress",

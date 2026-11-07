@@ -6,6 +6,8 @@ reading list to the **Reading** pane instead of pasting it into chat. You read
 each item there, mark it **Read**, **Acknowledge**, **Agree** or **Discuss**, add a comment,
 and send the results back as one message that Claude acts on.
 
+Install it with `/plugin install reading --marketplace enhki/claude-mods`.
+
 - **Items are sources.** A file path with an optional heading or line range such
   as `5-15`, an issue number with its `owner/repo` when it is not the session
   repository's, a link, or inline Markdown. The canonical text stays where it

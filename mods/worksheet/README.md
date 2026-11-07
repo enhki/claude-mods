@@ -7,6 +7,8 @@ named by the worksheet regenerates its Markdown export; changes reach Claude
 when you press **Send changes**, or by themselves a few seconds after each
 save when **Notify** is on.
 
+Install it with `/plugin install worksheet --marketplace enhki/claude-mods`.
+
 - **Worksheet files** are JSON with `schema: 1`, `choices`, `sections`, `rows`
   and optionally `render`. Rows carry `id`, `section`, `title`, `references`,
   the verbatim `role` cell, a parsed `suite` membership, `priority`, `comment`

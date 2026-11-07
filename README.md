@@ -23,8 +23,8 @@ loads in every session, desktop ones included.
 | [`forgejo-issues`](mods/forgejo-issues) | Browse, search and manage the current repo's Forgejo or Gitea issues in a pane |
 | [`work-session`](mods/work-session) | Kicks off and wraps up working sessions with your own start and end commands, and titles each session |
 | [`walkthrough`](mods/walkthrough) | A checklist pane for testing by hand: mark each step, add notes, send the results back in one message |
-| [`reading`](mods/reading) | A reading pane: Claude publishes documents, sections, issues and notes to read; mark each read, acknowledged or to discuss, comment, send the results back |
-| [`worksheet`](mods/worksheet) | A pane over a JSON worksheet: your priority and comment per row beside Claude's proposal, written straight back to the file |
+| [`reading`](mods/reading) | A reading pane: Claude publishes documents, sections, issues and notes to read; mark each read, acknowledged, agreed or to discuss, comment, send the results back |
+| [`worksheet`](mods/worksheet) | A pane over a JSON worksheet, with a tab per worksheet found: your priority and comment per row beside Claude's proposal, written straight back to the file |
 | [`progress`](mods/progress) | A band above the prompt: the active plan's slice, the last honest check or build gate, the forge review queue, and tallies of a decision worksheet and a specification catalogue |
 
 ### statusline-desktop
@@ -167,8 +167,8 @@ No settings.
 When Claude has material for you to read, a document, a section of one, a line
 range, an issue or a note, it publishes a reading list to a **Reading** pane
 instead of pasting it into chat; you read each item there, mark it **Read**,
-**Acknowledge** or **Discuss**, add a comment, and send the results back as one
-message.
+**Acknowledge**, **Agree** or **Discuss**, add a comment, and send the results
+back as one message.
 
 - **Items are sources.** A file path with an optional heading or line range such
   as `5-15`, an issue number with its `owner/repo` when it is not the session
@@ -177,12 +177,13 @@ message.
 - **Issues** are printed by a command: by default `fgj --hostname <host> issue
   view <n> -R <owner/repo>` against the host of the `origin` remote, or the
   template in the **Issue command** setting with `{number}` and `{repo}`.
-- **Marks keep their meaning.** Acknowledged is noted, not agreed; nothing is
-  decided in the pane. Publishing again merges by source and keeps your marks;
-  `replace` or **Clear list** starts over.
+- **Marks keep their meaning.** Acknowledged is noted, not agreed; agreed is read
+  and agreed with, so Claude may act on it; nothing else is decided in the pane.
+  Publishing again merges by source and keeps your marks; `replace` or
+  **Clear list** starts over.
 - **The pane** opens when Claude publishes, or with `/reading`. Terminal
-  hotkeys on the open item: `r`, `a`, `d` mark, `l` reloads, `s` sends, `x`
-  clears.
+  hotkeys on the open item: `r`, `a`, `g`, `d` mark, `l` reloads, `s` sends,
+  `x` clears.
 
 **Settings:** `issueCommand`, default empty.
 
@@ -202,7 +203,7 @@ press **Send changes**, or by themselves a few seconds after each save when
 - **Finding them:** the **Worksheet files** setting, else the project's
   `.claude/worksheets.json` as `{"worksheets": ["path.json"]}`, else every
   `*-worksheet.json` under `docs/prd`. `/worksheet` opens the first or the one
-  named.
+  named; with more than one, a tab per file sits above the title and opens it.
 - **Filters:** suite membership, category, priority or unset, rows with a
   proposal, rows whose proposal differs from the decision, and free text.
 - **Claude's side:** the `propose_worksheet` tool records a proposed priority
