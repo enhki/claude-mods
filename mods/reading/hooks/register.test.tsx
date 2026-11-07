@@ -68,7 +68,7 @@ for (const surface of ['terminal', 'desktop'] as const) {
     expect(JSON.stringify(result)).toContain('Published 2 items; the list holds 2')
     const ui = await $.ui.mount({ ...PANE, surface })
     expect(await ui.find({ text: 'Session inputs' })).toBeDefined()
-    expect(await ui.find({ text: /0 acknowledged, 0 read, 2 unread/ })).toBeDefined()
+    expect(await ui.find({ text: /0 agreed, 0 acknowledged, 0 read, 2 unread/ })).toBeDefined()
     expect(await ui.find({ text: /One row/ })).toBeUndefined()
   })
 
@@ -85,10 +85,10 @@ for (const surface of ['terminal', 'desktop'] as const) {
     expect(await ui.find({ text: /Loading/ })).toBeUndefined()
     await pressOn(ui, `acknowledged:${LEDGER}`)
     await commentOn(ui, LEDGER, 'fine by me')
-    expect(await ui.find({ text: /1 acknowledged, 0 read, 1 unread/ })).toBeDefined()
+    expect(await ui.find({ text: /0 agreed, 1 acknowledged, 0 read, 1 unread/ })).toBeDefined()
     await pressOn(ui, 'send')
     expect(seen.prompts).toHaveLength(1)
-    expect(seen.prompts[0]).toContain('Reading results for "Session inputs": 1 acknowledged, 0 read, 1 unread.')
+    expect(seen.prompts[0]).toContain('Reading results for "Session inputs": 0 agreed, 1 acknowledged, 0 read, 1 unread.')
     expect(seen.prompts[0]).toContain('1. ACKNOWLEDGED: The ledger [docs/decisions.md] (comment: fine by me)')
     expect(seen.prompts[0]).toContain('2. UNREAD: A note [note]')
   })
@@ -103,7 +103,7 @@ for (const surface of ['terminal', 'desktop'] as const) {
     expect(await ui.find({ text: 'Round two' })).toBeDefined()
     expect(await ui.find({ text: /1 to discuss, 2 unread/ })).toBeDefined()
     await $.tool.call({ ...LIST, replace: true, items: [{ title: 'Only', url: 'https://example.test/x' }] } as never)
-    expect(await ui.find({ text: /0 acknowledged, 0 read, 1 unread/ })).toBeDefined()
+    expect(await ui.find({ text: /0 agreed, 0 acknowledged, 0 read, 1 unread/ })).toBeDefined()
   })
 }
 

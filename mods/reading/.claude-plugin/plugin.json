@@ -1,7 +1,7 @@
 {
   "name": "reading",
-  "version": "0.1.0",
-  "description": "A reading pane: Claude publishes documents, sections, issues and notes to read, you mark each read, acknowledged or to discuss with a comment, and the results go back as one message",
+  "version": "0.2.0",
+  "description": "A reading pane: Claude publishes documents, sections, issues and notes to read, you mark each read, acknowledged, agreed or to discuss with a comment, and the results go back as one message",
   "author": {
     "name": "enhki"
   },

@@ -7,7 +7,7 @@ export const MAX_CONTENT = 60_000
 const MAX_TEXT = 4_000
 
 export const EMPTY: Reading = { title: '', intro: '', items: [], open: null, sent: 0, rev: 0 }
-export const MARKS: readonly Mark[] = ['read', 'acknowledged', 'discuss']
+export const MARKS: readonly Mark[] = ['read', 'acknowledged', 'agreed', 'discuss']
 
 function text(raw: unknown, max = MAX_TEXT): string {
   return typeof raw === 'string' ? raw.trim().slice(0, max) : ''
@@ -124,7 +124,7 @@ export function whole(r: Partial<Reading> | undefined): Reading {
     items: items.map(it => ({
       ...it,
       why: typeof it.why === 'string' ? it.why : '',
-      mark: it.mark === 'read' || it.mark === 'acknowledged' || it.mark === 'discuss' ? it.mark : 'unread',
+      mark: it.mark === 'read' || it.mark === 'acknowledged' || it.mark === 'agreed' || it.mark === 'discuss' ? it.mark : 'unread',
       comment: typeof it.comment === 'string' ? it.comment : '',
     })),
     open: typeof x.open === 'string' ? x.open : null,
@@ -210,16 +210,16 @@ export function slice(content: string, src: Source): string {
 export type Tally = Record<Mark, number>
 
 export function tally(r: Reading): Tally {
-  const t: Tally = { unread: 0, read: 0, acknowledged: 0, discuss: 0 }
+  const t: Tally = { unread: 0, read: 0, acknowledged: 0, agreed: 0, discuss: 0 }
   for (const it of r.items) t[it.mark] += 1
   return t
 }
 
-const WORD: Record<Mark, string> = { unread: 'UNREAD', read: 'READ', acknowledged: 'ACKNOWLEDGED', discuss: 'DISCUSS' }
-export const GLYPH: Record<Mark, string> = { unread: '·', read: '○', acknowledged: '✓', discuss: '?' }
+const WORD: Record<Mark, string> = { unread: 'UNREAD', read: 'READ', acknowledged: 'ACKNOWLEDGED', agreed: 'AGREED', discuss: 'DISCUSS' }
+export const GLYPH: Record<Mark, string> = { unread: '·', read: '○', acknowledged: '✓', agreed: '★', discuss: '?' }
 
 export function summary(t: Tally): string {
-  const parts = [`${t.acknowledged} acknowledged`, `${t.read} read`]
+  const parts = [`${t.agreed} agreed`, `${t.acknowledged} acknowledged`, `${t.read} read`]
   if (t.discuss) parts.push(`${t.discuss} to discuss`)
   if (t.unread) parts.push(`${t.unread} unread`)
   return parts.join(', ')
@@ -256,7 +256,7 @@ export function issueArgv(template: string, remote: Remote | null, repo: string,
 
 export const TOOL_DESCRIPTION = [
   "Publishes a reading list to the person's Reading pane: documents, sections of them, issues or notes you want them",
-  'to read, each with one line on why. They read each item in the pane, mark it read, acknowledged or to discuss,',
+  'to read, each with one line on why. They read each item in the pane, mark it read, acknowledged, agreed or to discuss,',
   'add a comment, and send the results back to you as one message. Use it instead of pasting long material into chat.',
   'An item names exactly one source: a file path (with optional lines like "5-15" or a heading), an issue number',
   '(with owner/repo when it is not the session repository), a URL, or inline text. Publishing again merges by source',

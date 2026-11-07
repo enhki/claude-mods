@@ -110,9 +110,9 @@ test('results_carry_every_item_with_its_mark_and_comment', () => {
   let r = mark(list(), 'file:docs/decisions.md', 'acknowledged')
   r = mark(r, 'issue:#12', 'discuss')
   r = { ...r, items: r.items.map(it => (it.key === 'issue:#12' ? { ...it, comment: '  needs\n a date ' } : it)) }
-  expect(tally(r)).toEqual({ unread: 4, read: 0, acknowledged: 1, discuss: 1 })
+  expect(tally(r)).toEqual({ unread: 4, read: 0, acknowledged: 1, agreed: 0, discuss: 1 })
   expect(results(r).split('\n').slice(0, 5)).toEqual([
-    'Reading results for "Session inputs": 1 acknowledged, 0 read, 1 to discuss, 4 unread.',
+    'Reading results for "Session inputs": 0 agreed, 1 acknowledged, 0 read, 1 to discuss, 4 unread.',
     '1. ACKNOWLEDGED: The ledger [docs/decisions.md]',
     '2. UNREAD: A section [docs/plan.md § Scope]',
     '3. UNREAD: Some lines [docs/plan.md:5-15]',

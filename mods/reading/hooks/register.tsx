@@ -40,8 +40,10 @@ const setList = ($: $, fn: (r: Reading) => Reading) => update($, current, (x): R
 let issueCommand = ''
 let remote: Remote | null = null
 
-const LABEL: Record<Mark, string> = { read: 'Read', acknowledged: 'Acknowledge', discuss: 'Discuss', unread: '' }
-const TONE: Record<Mark, string> = { read: 'suggestion', acknowledged: 'success', discuss: 'warning', unread: 'subtle' }
+const LABEL: Record<Mark, string> = { read: 'Read', acknowledged: 'Acknowledge', agreed: 'Agree', discuss: 'Discuss', unread: '' }
+const TONE: Record<Mark, string> = { read: 'suggestion', acknowledged: 'success', agreed: 'success', discuss: 'warning', unread: 'subtle' }
+// Hotkeys by mark; agreed cannot take its first letter, which acknowledged holds.
+const HOTKEY: Record<Mark, string> = { read: 'r', acknowledged: 'a', agreed: 'g', discuss: 'd', unread: '' }
 const LANGUAGE: Record<string, string> = {
   hs: 'haskell',
   py: 'python',
@@ -105,7 +107,7 @@ async function press($: $, id: string): Promise<void> {
   const at = id.indexOf(':')
   const action = at === -1 ? id : id.slice(0, at)
   const key = at === -1 ? '' : id.slice(at + 1)
-  if (action === 'read' || action === 'acknowledged' || action === 'discuss') {
+  if (action === 'read' || action === 'acknowledged' || action === 'agreed' || action === 'discuss') {
     await setList($, r => mark(r, key, action))
   } else if (action === 'open' || action === 'reload') {
     const before = await readList($)
@@ -273,7 +275,7 @@ export const register: Register = (on, options) => {
           <Box key={`marks-${it.key}`} flexDirection="row" gap={1}>
             {MARKS.map(k =>
               control(`${k}:${it.key}`, it.mark === k ? `${LABEL[k]} ✓` : LABEL[k], {
-                hotkey: k[0],
+                hotkey: HOTKEY[k],
                 tone: it.mark === k ? TONE[k] : undefined,
               }),
             )}

@@ -18,7 +18,7 @@ export type Source =
   | { kind: 'url'; url: string }
   | { kind: 'text'; text: string }
 
-export type Mark = 'unread' | 'read' | 'acknowledged' | 'discuss'
+export type Mark = 'unread' | 'read' | 'acknowledged' | 'agreed' | 'discuss'
 
 export type Item = {
   /** Stable, from the source: what a republish merges on. */
