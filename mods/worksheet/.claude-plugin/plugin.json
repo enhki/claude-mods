@@ -1,7 +1,7 @@
 {
   "name": "worksheet",
-  "version": "0.1.0",
-  "description": "A pane over a JSON worksheet: rows grouped by section with search and filters, your priority and comment per row beside Claude's proposal and reason, written straight back to the file, with changes sent to Claude on demand or as they happen",
+  "version": "0.2.0",
+  "description": "A pane over a JSON worksheet: rows grouped by section with search and filters, your priority and comment per row beside Claude's proposal and reason, written straight back to the file, with tabs across the worksheets found and changes sent to Claude on demand or as they happen",
   "author": {
     "name": "enhki"
   },

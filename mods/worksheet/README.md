@@ -15,7 +15,9 @@ save when **Notify** is on.
 - **Finding them:** the mod's Worksheet files setting, else the project's
   `.claude/worksheets.json` as `{"worksheets": ["path.json"]}`, else every
   `*-worksheet.json` under `docs/prd`. `/worksheet` opens the first or the one
-  named, by path or a part of it.
+  named, by path or a part of it. With more than one worksheet the pane shows a
+  tab per file above the title, named after the file without its
+  `-worksheet.json` suffix; pressing a tab opens that worksheet.
 - **Filters:** suite membership (required, note, future, additional, not in
   suite), suite category, priority or unset, rows with a proposal, rows whose
   proposal differs from the decision, and free text over id, title, role,

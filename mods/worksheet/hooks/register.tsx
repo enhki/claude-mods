@@ -366,6 +366,12 @@ export const register: Register = (on, options) => {
     return (
       <Box flexDirection="column" gap={1}>
         <Box key="head" flexDirection="column">
+          {s.paths.length > 1 ? (
+            // One tab per worksheet found; the open one is bracketed. Pressing loads that file.
+            <Box key="tabs" flexDirection="row" gap={1}>
+              {s.paths.map(p => chip(`pick:${p}`, tabName(p), p === s.path))}
+            </Box>
+          ) : null}
           <Text bold>{sheet.title}</Text>
           <Text dimColor>
             {s.path} · {tally}
@@ -410,4 +416,10 @@ export const register: Register = (on, options) => {
       </Box>
     )
   })
+}
+
+/** A worksheet's tab label: its file name without the `-worksheet.json` suffix. */
+function tabName(path: string): string {
+  const base = path.slice(path.lastIndexOf('/') + 1)
+  return base.endsWith('-worksheet.json') ? base.slice(0, -'-worksheet.json'.length) : base
 }
