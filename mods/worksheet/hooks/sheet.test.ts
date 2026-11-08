@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { applyProposals, counts, edit, EMPTY, filterRows, membershipLabel, parseConfig, parseWorksheet, patchFile, summary, whole } from './sheet'
+import { applyProposals, counts, edit, EMPTY, filterRows, membershipLabel, parseConfig, parseWorksheet, patchFile, recorded, remaining, summary, whole } from './sheet'
 
 const FILE = {
   schema: 1,
@@ -150,4 +150,20 @@ test('config_and_saved_state_are_read_leniently', () => {
   expect(whole({ paths: ['x'] as never, filter: { text: 'q' } as never }).filter).toEqual({ text: 'q', membership: '', category: '', priority: '', proposed: '' })
   expect(membershipLabel({ membership: 'required', categories: ['Mobile', 'IM'], levels: ['C/S', 'AC/AS'], flags: ['P'] })).toBe('Mobile C/S, IM AC/AS [P]')
   expect(membershipLabel({ membership: 'future', categories: [], levels: [], flags: [] })).toBe('suite future')
+})
+
+test('saved_changes_leave_pending_by_content_and_the_log_keeps_one_entry_per_field', () => {
+  const batch = [
+    { id: 'r', field: 'priority', from: '', to: 'agree' },
+    { id: 'r', field: 'comment', from: '', to: 'how' },
+  ] as const
+  // Copies, not the same objects: state comes back from JSON between a save and its bookkeeping.
+  const pending = [...JSON.parse(JSON.stringify(batch)), { id: 'r', field: 'comment', from: '', to: 'how would' }]
+  expect(remaining(pending, batch)).toEqual([{ id: 'r', field: 'comment', from: '', to: 'how would' }])
+  const once = recorded([], batch)
+  const twice = recorded(once, [{ id: 'r', field: 'comment', from: 'how', to: 'how would an agent know' }])
+  expect(twice).toEqual([
+    { id: 'r', field: 'priority', from: '', to: 'agree' },
+    { id: 'r', field: 'comment', from: '', to: 'how would an agent know' },
+  ])
 })

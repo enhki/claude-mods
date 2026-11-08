@@ -36,6 +36,12 @@ const Note: ClientModule<NoteProps, Local> = (props, surface) => {
     })
     surface.onKey(e => {
       const cur = surface.state ?? st
+      // Ctrl+Enter or Cmd+Enter saves the comment; plain posts only keep the pane's copy current.
+      if (e.key === 'return' && (e.ctrl || e.meta)) {
+        surface.setState({ ...cur, dirty: false })
+        surface.post({ comment: item, text: cur.text, save: true })
+        return
+      }
       const next = applyKey(cur, e.key, { ctrl: e.ctrl, meta: e.meta }, true)
       if (next && (next.text !== cur.text || next.caret !== cur.caret)) {
         surface.setState({ ...cur, ...next, dirty: cur.dirty || next.text !== cur.text })

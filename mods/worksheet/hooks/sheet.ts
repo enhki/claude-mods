@@ -202,6 +202,25 @@ export function applyProposals(data: unknown, proposals: readonly Proposal[], ch
 }
 
 /** The message Claude receives: one line per changed row, its proposal beside it. */
+/** The pending changes still unsaved after a batch was written: matched by content, since state
+ *  round-trips through JSON and object identity does not survive it. A newer edit of the same row
+ *  and field, made while the batch was being written, stays pending. */
+export function remaining(pending: readonly Change[], batch: readonly Change[]): Change[] {
+  return pending.filter(c => !batch.some(b => b.id === c.id && b.field === c.field && b.to === c.to))
+}
+
+/** The log with a batch recorded: one entry per row and field, keeping the earliest `from` and the
+ *  latest `to`, so a comment saved twice reaches Claude once, in its final form. */
+export function recorded(log: readonly Change[], batch: readonly Change[]): Change[] {
+  const out = [...log]
+  for (const b of batch) {
+    const i = out.findIndex(c => c.id === b.id && c.field === b.field)
+    if (i === -1) out.push(b)
+    else out[i] = { ...b, from: out[i].from }
+  }
+  return out
+}
+
 export function summary(sheet: Worksheet, path: string, log: readonly Change[]): string {
   const byRow = new Map<string, Change[]>()
   for (const c of log) byRow.set(c.id, [...(byRow.get(c.id) ?? []), c])

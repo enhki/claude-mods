@@ -22,6 +22,8 @@ import {
   UNSET,
   whole,
   type Proposal,
+  recorded,
+  remaining,
 } from './sheet'
 
 const PANE = 'worksheet'
@@ -81,7 +83,7 @@ async function flush($: $): Promise<void> {
     const missing = patchFile(data, batch)
     await $.fs.write(s.path, `${JSON.stringify(data, null, 2)}\n`)
     if (missing.length) $.ui.log(`worksheet: rows not in ${s.path}: ${missing.join(', ')}`)
-    await setState($, x => ({ ...x, pending: x.pending.filter(c => !batch.includes(c)), log: [...x.log, ...batch], saving: false }))
+    await setState($, x => ({ ...x, pending: remaining(x.pending, batch), log: recorded(x.log, batch), saving: false }))
     const sheet = s.sheet
     if (sheet?.render) {
       const ran = await $.process.run(sheet.render.split(/\s+/), { stdin: '', timeoutMs: RENDER_MS })
@@ -153,6 +155,8 @@ async function press($: $, id: string): Promise<void> {
   } else if (action === 'send') {
     await send($)
   } else if (action === 'reload') {
+    const paths = await discover($)
+    await setState($, x => ({ ...x, paths }))
     const s = await readState($)
     if (s.path) await load($, s.path)
   } else if (action === 'pick') {
@@ -200,6 +204,9 @@ export const register: Register = (on, options) => {
   })
 
   on('command.run', { command: 'worksheet' }, async ($, e) => {
+    // Rediscover on every open: a worksheet added during the session gets its tab without a restart.
+    const paths = await discover($)
+    await setState($, x => ({ ...x, paths }))
     const s = await readState($)
     const arg = (e as { args?: unknown }).args
     const wanted = typeof arg === 'string' && arg.trim() ? arg.trim() : s.path
@@ -245,15 +252,16 @@ export const register: Register = (on, options) => {
     return { result: `Recorded ${outcome.applied} proposal${outcome.applied === 1 ? '' : 's'} in ${path}, ${where}.${missing} The person's decisions come back as worksheet change messages.` }
   })
 
-  // The desktop's controls are Clients posting { press }; its comment editors post { comment, text }.
+  // The desktop's controls are Clients posting { press }; its comment editors post { comment, text }
+  // while typing and { comment, text, save: true } on Ctrl+Enter. Only a save writes the file.
   on('ui.message', { component: 'Pane', requestId: PANE }, async ($, e) => {
-    const msg = e.data as { press?: unknown; comment?: unknown; text?: unknown } | null
+    const msg = e.data as { press?: unknown; comment?: unknown; text?: unknown; save?: unknown } | null
     if (typeof msg?.press === 'string') await press($, msg.press)
     if (typeof msg?.comment === 'string' && typeof msg.text === 'string') {
       const row = msg.comment
       const text = msg.text
       await setState($, x => edit(x, row, 'comment', text))
-      scheduleSave($)
+      if (msg.save === true) scheduleSave($)
     }
     return {}
   })
@@ -328,14 +336,14 @@ export const register: Register = (on, options) => {
               placeholder="why include, defer or ignore (optional)"
               value={r.comment}
               submitLabel="save"
-              onInput={value => setState($, x => edit(x, r.id, 'comment', value)).then(() => scheduleSave($))}
+              onInput={value => setState($, x => edit(x, r.id, 'comment', value))}
               onSubmit={value => setState($, x => edit(x, r.id, 'comment', value)).then(() => scheduleSave($))}
             />
           ) : (
             <Client
               key={`comment:${s.rev}:${r.id}`}
               module="./note.tsx"
-              props={{ item: r.id, value: r.comment, placeholder: 'Comment: why include, defer or ignore (optional)' }}
+              props={{ item: r.id, value: r.comment, placeholder: 'Comment: why include, defer or ignore (optional); Ctrl+Enter saves' }}
               width="100%"
             />
           )}

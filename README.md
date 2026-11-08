@@ -204,6 +204,10 @@ press **Send changes**, or by themselves a few seconds after each save when
   `.claude/worksheets.json` as `{"worksheets": ["path.json"]}`, else every
   `*-worksheet.json` under `docs/prd`. `/worksheet` opens the first or the one
   named; with more than one, a tab per file sits above the title and opens it.
+  The files are found again each time the pane opens, so a worksheet added
+  during the session needs no restart.
+  A comment is written, and Notify sent, when you save it, not while you type;
+  each notice names a changed row once.
 - **Filters:** suite membership, category, priority or unset, rows with a
   proposal, rows whose proposal differs from the decision, and free text.
 - **Claude's side:** the `propose_worksheet` tool records a proposed priority

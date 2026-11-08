@@ -85,11 +85,31 @@ type Pressable = {
   post: (data: JsonValue, scope?: { in: string }) => Promise<void>
 }
 
+// A worksheet added after the session started gets found when the pane opens again, without a restart.
+test('a_worksheet_added_during_the_session_is_found_on_the_next_open', async ($, on) => {
+  const files = ['msg-worksheet.json']
+  mock.clock(on)
+  on('session.start', (_, e) => ({ cwd: e.cwd }) as never)
+  on('command.register', () => ({ value: { command: 'worksheet' } }) as never)
+  on('tool.register', () => ({ value: { tool: 'propose_worksheet' } }) as never)
+  on('ui.open', () => ({ value: { isPlaced: true } }))
+  on('ui.toast', () => ({ value: undefined }))
+  on('ui.status', () => ({ value: undefined }) as never)
+  on('fs.read', ($, e) => ({ value: (e as { path: string }).path.endsWith('-worksheet.json') ? JSON.stringify(FILE) : '' }) as never)
+  on('fs.list', () => ({ value: files.map(name => ({ name, kind: 'file', size: 1, mtimeMs: 0, isLink: false })) }) as never)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true } as never)
+  const first = await $.command.run({ command: 'worksheet' } as never)
+  expect(JSON.stringify(first)).toContain(`Worksheet pane opened on ${PATH}`)
+  files.push('vocab-worksheet.json')
+  const second = await $.command.run({ command: 'worksheet', args: 'vocab' } as never)
+  expect(JSON.stringify(second)).toContain('Worksheet pane opened on docs/prd/vocab-worksheet.json')
+})
+
 for (const surface of ['terminal', 'desktop'] as const) {
   const pressOn = (ui: Pressable, id: string) =>
     surface === 'terminal' ? ui.press({ key: id }) : ui.post({ press: id }, { in: id })
   const commentOn = (ui: Pressable, row: string, text: string, rev: number) =>
-    surface === 'terminal' ? ui.input({ key: `comment:${row}`, text }) : ui.post({ comment: row, text }, { in: `comment:${rev}:${row}` })
+    surface === 'terminal' ? ui.input({ key: `comment:${row}`, text }) : ui.post({ comment: row, text, save: true }, { in: `comment:${rev}:${row}` })
 
   test(`${surface}_the_command_opens_the_discovered_worksheet`, async ($, on) => {
     fakeEngine(on)
