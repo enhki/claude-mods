@@ -74,7 +74,12 @@ async function discover($: $): Promise<string[]> {
 /** Writes the pending changes into the file (read, patch, write), then renders the export and queues the notice. */
 async function flush($: $): Promise<void> {
   const s = await readState($)
-  if (!s.path || s.pending.length === 0 || s.saving) return
+  if (!s.path || s.pending.length === 0) return
+  if (s.saving) {
+    // A save asked for while the last one is still writing waits for it instead of being dropped.
+    scheduleSave($)
+    return
+  }
   const batch = s.pending
   await setState($, x => ({ ...x, saving: true }))
   try {
