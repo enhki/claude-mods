@@ -17,6 +17,11 @@ import {
   parseConfig,
   parseWorksheet,
   patchFile,
+  progressCounts,
+  progressFilter,
+  progressGlyph,
+  progressLegend,
+  progressMarks,
   summary,
   TOOL_DESCRIPTION,
   UNSET,
@@ -24,6 +29,7 @@ import {
   type Proposal,
   recorded,
   remaining,
+  undeclaredMarks,
 } from './sheet'
 
 const PANE = 'worksheet'
@@ -150,8 +156,8 @@ async function press($: $, id: string): Promise<void> {
     await setState($, x => ({ ...x, open: x.open === arg ? null : arg }))
   } else if (action === 'sec') {
     await setState($, x => ({ ...x, collapsed: x.collapsed.includes(arg) ? x.collapsed.filter(c => c !== arg) : [...x.collapsed, arg] }))
-  } else if (action === 'fm' || action === 'fc' || action === 'fp' || action === 'fx') {
-    const field = { fm: 'membership', fc: 'category', fp: 'priority', fx: 'proposed' }[action] as keyof typeof NO_FILTER
+  } else if (action === 'fm' || action === 'fc' || action === 'fp' || action === 'fx' || action === 'fg') {
+    const field = { fm: 'membership', fc: 'category', fp: 'priority', fx: 'proposed', fg: 'progress' }[action] as keyof typeof NO_FILTER
     await setState($, x => ({ ...x, filter: { ...x.filter, [field]: x.filter[field] === arg ? '' : arg } }))
   } else if (action === 'clearfilter') {
     await setState($, x => ({ ...x, filter: NO_FILTER }))
@@ -313,13 +319,49 @@ export const register: Register = (on, options) => {
     const keptIds = new Set(kept.map(r => r.id))
     const tally = [...sheet.choices.map(ch => `${label(ch)} ${c.byPriority[ch] ?? 0}`), `unset ${c.unset}`, `proposals ${c.proposals}${c.differs ? ` (${c.differs} differ)` : ''}`].join(' · ')
     const categories = [...new Set(sheet.rows.flatMap(r => r.suite.categories))]
-    const filtered = s.filter.text || s.filter.membership || s.filter.category || s.filter.priority || s.filter.proposed
+    const filtered = s.filter.text || s.filter.membership || s.filter.category || s.filter.priority || s.filter.proposed || s.filter.progress
+
+    // Progress marks: shown only when the worksheet declares them, and never edited here.
+    const decl = sheet.progress
+    const odd = undeclaredMarks(sheet)
+    const marksOf = (r: Row) => {
+      const m = progressMarks(sheet, r)
+      return m ? `${m} ` : ''
+    }
+    const progressLines = (r: Row) =>
+      decl
+        ? decl.roles.map(role => {
+            const m = r.progress[role]
+            if (!m) return <Text key={`pg-${role}`} dimColor>{role}: unknown</Text>
+            const declared = decl.states.includes(m.state)
+            return (
+              <Text key={`pg-${role}`} color={declared ? undefined : 'warning'}>
+                {role}: {progressGlyph(m.state, decl.states)} {m.state}
+                {declared ? '' : ' (not a declared state)'}
+                {m.evidence ? ` · ${m.evidence}` : ''}
+              </Text>
+            )
+          })
+        : []
+    const tallies = decl
+      ? (() => {
+          const by = progressCounts(sheet)
+          return decl.roles.map(role => {
+            const t = by[role] ?? {}
+            const parts = Object.entries(t)
+              .sort(([a], [b]) => (decl.states.indexOf(a) + 1 || 99) - (decl.states.indexOf(b) + 1 || 99))
+              .map(([st, n]) => `${st ? progressGlyph(st, decl.states) : 'unknown'} ${n}`)
+            return `${role} ${parts.join(' ')}`
+          }).join(' · ')
+        })()
+      : ''
 
     const detail = (r: Row) => {
       const refs = r.references.map(x => `[${x.id}](${x.url})${x.version || x.status ? ` (${x.version}; ${x.status})` : ''}`).join('; ')
       return (
         <Box key={`row-${r.id}`} flexDirection="column" borderStyle="round" borderColor="suggestion" paddingX={1}>
-          {row(`open:${r.id}`, `${glyph(r.priority)} ${r.id}  ${r.title}`, 'suggestion', false)}
+          {row(`open:${r.id}`, `${glyph(r.priority)} ${marksOf(r)}${r.id}  ${r.title}`, 'suggestion', false)}
+          {progressLines(r)}
           {refs !== '' && <Markdown text={refs} />}
           {r.role !== '' && <Text dimColor>{r.role}</Text>}
           {r.suite.membership !== '' && <Text dimColor>suite: {membershipLabel(r.suite)}</Text>}
@@ -370,7 +412,7 @@ export const register: Register = (on, options) => {
               const proposal = r.proposed.priority ? `  ⟵ ${label(r.proposed.priority)}` : ''
               const note = r.comment.trim() ? '  ✎' : ''
               const pri = r.priority ? ` · ${label(r.priority)}` : ''
-              return row(`open:${r.id}`, `${glyph(r.priority)} ${r.id}  ${r.title}${pri}${proposal}${note}`, r.priority ? 'success' : r.proposed.priority ? 'warning' : 'subtle', !r.priority && !r.proposed.priority)
+              return row(`open:${r.id}`, `${glyph(r.priority)} ${marksOf(r)}${r.id}  ${r.title}${pri}${proposal}${note}`, r.priority ? 'success' : r.proposed.priority ? 'warning' : 'subtle', !r.priority && !r.proposed.priority)
             })}
         </Box>,
       ]
@@ -390,6 +432,18 @@ export const register: Register = (on, options) => {
             {s.path} · {tally}
             {s.pending.length ? ' · saving…' : ''}
           </Text>
+          {decl ? (
+            <Text key="legend" dimColor>
+              Progress ({decl.roles.join(', ')}): {progressLegend(decl)}
+            </Text>
+          ) : null}
+          {decl ? <Text key="tallies" dimColor>{tallies}</Text> : null}
+          {odd.length ? (
+            <Text key="odd" color="warning">
+              {odd.length} mark{odd.length === 1 ? ' names a state' : 's name states'} the worksheet does not declare ({decl?.states.join(', ')}), shown as ?: {odd.slice(0, 3).join('; ')}
+              {odd.length > 3 ? `; and ${odd.length - 3} more` : ''}
+            </Text>
+          ) : null}
         </Box>
         <Box key="filters" flexDirection="column">
           <Input
@@ -412,6 +466,22 @@ export const register: Register = (on, options) => {
             {chip('fx:differs', 'proposal differs', s.filter.proposed === 'differs')}
             {Boolean(filtered) && control('clearfilter', 'Clear filters')}
           </Box>
+          {decl
+            ? decl.roles.map(role => {
+                const first = decl.states[0]
+                const options = [
+                  ...decl.states.map(st => ({ id: progressFilter(role, st), text: `${progressGlyph(st, decl.states)} ${st}` })),
+                  ...(first ? [{ id: progressFilter(role, first, true), text: `not ${first}` }] : []),
+                  { id: progressFilter(role, ''), text: 'unknown' },
+                ]
+                return (
+                  <Box key={`fg-${role}`} flexDirection="row" gap={1} flexWrap="wrap">
+                    <Text dimColor>{role}:</Text>
+                    {options.map(o => chip(`fg:${o.id}`, o.text, s.filter.progress === o.id))}
+                  </Box>
+                )
+              })
+            : null}
           <Text dimColor>
             {kept.length} of {sheet.rows.length} rows{s.open && !keptIds.has(s.open) ? ' (the open row is filtered out)' : ''}
           </Text>

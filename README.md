@@ -24,7 +24,7 @@ loads in every session, desktop ones included.
 | [`work-session`](mods/work-session) | Kicks off and wraps up working sessions with your own start and end commands, and titles each session |
 | [`walkthrough`](mods/walkthrough) | A checklist pane for testing by hand: mark each step, add notes, send the results back in one message |
 | [`reading`](mods/reading) | A reading pane: Claude publishes documents, sections, issues and notes to read; mark each read, acknowledged, agreed or to discuss, comment, send the results back |
-| [`worksheet`](mods/worksheet) | A pane over a JSON worksheet, with a tab per worksheet found: your priority and comment per row beside Claude's proposal, written straight back to the file |
+| [`worksheet`](mods/worksheet) | A pane over a JSON worksheet, with a tab per worksheet found: your priority and comment per row beside Claude's proposal and read-only progress marks, written straight back to the file |
 | [`progress`](mods/progress) | A band above the prompt: the active plan's slice, the last honest check or build gate, the forge review queue, and tallies of a decision worksheet and a specification catalogue |
 
 ### statusline-desktop
@@ -208,8 +208,17 @@ press **Send changes**, or by themselves a few seconds after each save when
   during the session needs no restart.
   A comment is written, and Notify sent, when you save it, not while you type;
   each notice names a changed row once.
+- **Progress marks** (optional, read-only): a worksheet declaring
+  `progress: { roles, states }` shows one glyph per role on each row from the
+  row's `progress: { <role>: { state, evidence } }`: done `✓`, in-progress
+  `◐`, not-started `·`, n/a `–`, unknown blank; another declared state shows
+  its capitalised first letter, an undeclared one `?` with a note naming it.
+  A legend and per-role counts sit under the title, and the open row lists
+  each role's state and evidence. The pane never writes the field; saving a
+  priority or comment leaves it untouched. Without `progress`, nothing changes.
 - **Filters:** suite membership, category, priority or unset, rows with a
-  proposal, rows whose proposal differs from the decision, and free text.
+  proposal, rows whose proposal differs from the decision, progress per role
+  (a state, "not" the first declared state, or unknown), and free text.
 - **Claude's side:** the `propose_worksheet` tool records a proposed priority
   and reason per row; a proposal never changes a decision.
 - Terminal hotkeys on the open row: the first letter of each choice sets it,

@@ -14,6 +14,17 @@ Install it with `/plugin install worksheet --marketplace enhki/claude-mods`.
   the verbatim `role` cell, a parsed `suite` membership, `priority`, `comment`
   and `proposed: { priority, reason }`. Anything else in the file is kept as
   is; the pane changes only the fields it owns.
+- **Progress marks** (optional, read-only): a worksheet that declares
+  `progress: { roles, states }` shows one glyph per role on each row, from the
+  row's `progress: { <role>: { state, evidence } }`: done `✓`, in-progress
+  `◐`, not-started `·`, n/a `–`, unknown (no mark) blank. Another declared
+  state shows its first letter, capitalised; a state the worksheet does not
+  declare shows `?`, and a note above the rows names those marks. A legend and
+  a count per role sit under the title, the open row lists each role's state
+  and evidence, and a filter per role keeps one state, rows not in the first
+  declared state (for example "server: not done"), or the unknown. Agents
+  maintain the field; the pane never writes it, and saving a priority or
+  comment leaves it as it was. A worksheet without `progress` looks as before.
 - **Finding them:** the mod's Worksheet files setting, else the project's
   `.claude/worksheets.json` as `{"worksheets": ["path.json"]}`, else every
   `*-worksheet.json` under `docs/prd`. `/worksheet` opens the first or the one
@@ -22,8 +33,8 @@ Install it with `/plugin install worksheet --marketplace enhki/claude-mods`.
   `-worksheet.json` suffix; pressing a tab opens that worksheet.
 - **Filters:** suite membership (required, note, future, additional, not in
   suite), suite category, priority or unset, rows with a proposal, rows whose
-  proposal differs from the decision, and free text over id, title, role,
-  references, comment and reason.
+  proposal differs from the decision, progress by role and state, and free
+  text over id, title, role, references, comment, reason and evidence.
 - **Claude's side:** the `propose_worksheet` tool records a proposed priority
   and reason per row id. A proposal never changes a decision; the pane shows
   it beside yours.

@@ -23,7 +23,15 @@ export type Row = {
   comment: string
   /** Claude's suggestion, kept beside the decision. */
   proposed: { priority: Priority; reason: string }
+  /** Implementation progress per declared role; a role absent here is unknown. Read-only in the pane. */
+  progress: Record<string, Mark>
 }
+
+/** One role's progress on a row: a declared state and a short, checkable pointer to the evidence. */
+export type Mark = { state: string; evidence: string }
+
+/** The roles a worksheet tracks progress for, and the states a mark may take, in order. */
+export type Progress = { roles: string[]; states: string[] }
 
 export type Section = { id: string; title: string; kind: 'capabilities' | 'product' }
 
@@ -35,6 +43,8 @@ export type Worksheet = {
   render: string
   sections: Section[]
   rows: Row[]
+  /** Null when the worksheet declares no progress: the pane then shows none. */
+  progress: Progress | null
 }
 
 /** One saved edit, for the file and for the message to Claude. */
@@ -50,6 +60,8 @@ export type Filter = {
   priority: string
   /** 'any' for rows with a proposal, 'differs' for proposals not yet matched, or '' for all. */
   proposed: string
+  /** `role=state`, `role!=state` (any other, unknown included) or `role=` (unknown), or '' for all. */
+  progress: string
 }
 
 export type SheetState = {

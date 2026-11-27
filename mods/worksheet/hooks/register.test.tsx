@@ -10,6 +10,13 @@ const PANE = {
 
 const PATH = 'docs/prd/msg-worksheet.json'
 
+// The same worksheet tracking progress for two roles: a misspelt state on the first row, the second's client unknown.
+const PROGRESS = { roles: ['client', 'server'], states: ['done', 'in-progress', 'not-started', 'n/a'] }
+const MARKS = [
+  { client: { state: 'done', evidence: 'PR #1, abc1234' }, server: { state: 'dnoe', evidence: 'PR #2' } },
+  { server: { state: 'not-started', evidence: '' } },
+]
+
 const FILE = {
   schema: 1,
   title: 'MSG worksheet',
@@ -43,12 +50,14 @@ const FILE = {
   ],
 }
 
+const TRACKED = { ...FILE, progress: PROGRESS, rows: FILE.rows.map((r, i) => ({ ...r, progress: MARKS[i] })) }
+
 type Fake = { prompts: string[]; writes: { path: string; text: string }[]; runs: string[][]; settle: () => Promise<void>; advance: (ms: number) => Promise<void> }
 
 // The engine beneath the mod: one worksheet in docs/prd, a file that remembers what was written, commands that succeed.
-function fakeEngine(on: On): Fake {
+function fakeEngine(on: On, file: object = FILE): Fake {
   const clock = mock.clock(on)
-  let text = JSON.stringify(FILE, null, 2)
+  let text = JSON.stringify(file, null, 2)
   const seen: Fake = { prompts: [], writes: [], runs: [], settle: () => clock.settle(), advance: ms => clock.advance(ms) }
   on('session.start', (_, e) => ({ cwd: e.cwd }) as never)
   on('command.register', () => ({ value: { command: 'worksheet' } }) as never)
@@ -167,6 +176,65 @@ for (const surface of ['terminal', 'desktop'] as const) {
     await seen.advance(3_100)
     expect(seen.prompts).toHaveLength(2)
     expect(seen.prompts[1]).toContain('- xep-0030 Discover features: priority unset → must (proposed must)')
+  })
+
+  test(`${surface}_progress_marks_a_legend_and_the_open_rows_evidence_show_when_declared`, async ($, on) => {
+    fakeEngine(on, TRACKED)
+    await $.session.start({ cwd: '/', surface, isInteractive: true } as never)
+    await $.command.run({ command: 'worksheet' } as never)
+    const ui = await $.ui.mount({ ...PANE, surface })
+    expect(await ui.find({ text: /Progress \(client, server\): ✓ done  ◐ in-progress  · not-started  – n\/a  blank unknown  \? not a declared state/ })).toBeDefined()
+    expect(await ui.find({ text: /client ✓ 1 unknown 1 · server · 1 \? 1/ })).toBeDefined()
+    expect(await ui.find({ text: /1 mark names a state the worksheet does not declare .*xep-0030 server "dnoe"/ })).toBeDefined()
+    const label = async (re: RegExp) =>
+      surface === 'terminal' ? Boolean(await ui.find({ text: re })) : (await ui.findAll({ type: 'Client' })).some(c => re.test(String((c.props as { props?: { label?: unknown } }).props?.label ?? '')))
+    expect(await label(/^· ✓\? xep-0030  Discover features/)).toBe(true)
+    expect(await label(/^· {2}· xep-0449  Stickers/)).toBe(true)
+    await pressOn(ui, 'open:xep-0030')
+    expect(await ui.find({ text: /client: ✓ done · PR #1, abc1234/ })).toBeDefined()
+    expect(await ui.find({ text: /server: \? dnoe \(not a declared state\) · PR #2/ })).toBeDefined()
+    await pressOn(ui, 'fg:server!=done')
+    expect(await ui.find({ text: /2 of 2 rows/ })).toBeDefined()
+    await pressOn(ui, 'fg:client=done')
+    expect(await ui.find({ text: /1 of 2 rows/ })).toBeDefined()
+    await pressOn(ui, 'fg:client=')
+    expect(await ui.find({ text: /1 of 2 rows/ })).toBeDefined()
+    expect(await label(/Discover features/)).toBe(false)
+    await pressOn(ui, 'fg:client=')
+    expect(await ui.find({ text: /2 of 2 rows/ })).toBeDefined()
+  })
+
+  test(`${surface}_a_worksheet_without_progress_shows_none`, async ($, on) => {
+    fakeEngine(on)
+    await $.session.start({ cwd: '/', surface, isInteractive: true } as never)
+    await $.command.run({ command: 'worksheet' } as never)
+    const ui = await $.ui.mount({ ...PANE, surface })
+    expect(await ui.find({ text: /Progress/ })).toBeUndefined()
+    expect(await ui.find({ text: /client/ })).toBeUndefined()
+    expect(JSON.stringify(await ui.findAll({ type: 'Client' }))).not.toContain('fg:')
+  })
+
+  test(`${surface}_saving_a_priority_and_a_comment_leaves_progress_untouched`, async ($, on) => {
+    const seen = fakeEngine(on, TRACKED)
+    await $.session.start({ cwd: '/', surface, isInteractive: true } as never)
+    await $.command.run({ command: 'worksheet' } as never)
+    const ui = await $.ui.mount({ ...PANE, surface })
+    await pressOn(ui, 'open:xep-0030')
+    await pressOn(ui, 'pri:must:xep-0030')
+    await seen.advance(500)
+    await commentOn(ui, 'xep-0030', 'ship it', 1)
+    await seen.advance(500)
+    expect(seen.writes).toHaveLength(2)
+    const written = JSON.parse(seen.writes[1]?.text ?? '{}')
+    expect(written.rows[0].priority).toBe('must')
+    expect(written.rows[0].comment).toBe('ship it')
+    // Everything but the two edited fields round-trips as it was, the progress block included.
+    const expected = JSON.parse(JSON.stringify(TRACKED))
+    expected.rows[0].priority = 'must'
+    expected.rows[0].comment = 'ship it'
+    expect(written).toEqual(expected)
+    expect(written.progress).toEqual(PROGRESS)
+    expect(written.rows.map((r: { progress: unknown }) => r.progress)).toEqual(MARKS)
   })
 
   test(`${surface}_filters_narrow_the_rows`, async ($, on) => {

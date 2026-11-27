@@ -1,11 +1,12 @@
 /** Pure decisions behind the pane: reading a worksheet, filtering it, applying edits, summarising them. */
 
-import type { Change, Filter, Priority, Row, Section, SheetState, Suite, Worksheet } from '../types'
+import type { Change, Filter, Mark, Priority, Progress, Row, Section, SheetState, Suite, Worksheet } from '../types'
 
 const MAX_COMMENT = 4_000
 const MAX_REASON = 1_000
+const MAX_EVIDENCE = 300
 
-export const NO_FILTER: Filter = { text: '', membership: '', category: '', priority: '', proposed: '' }
+export const NO_FILTER: Filter = { text: '', membership: '', category: '', priority: '', proposed: '', progress: '' }
 
 export const EMPTY: SheetState = {
   paths: [],
@@ -41,6 +42,28 @@ function suite(raw: unknown): Suite {
   return { membership, categories: strings(s.categories), levels: strings(s.levels), flags: strings(s.flags) }
 }
 
+/** The worksheet's progress declaration; null when absent or naming no roles. */
+function progressDecl(raw: unknown): Progress | null {
+  const p = (raw ?? {}) as Record<string, unknown>
+  const roles = [...new Set(strings(p.roles).map(r => r.slice(0, 40)).filter(Boolean))]
+  if (roles.length === 0) return null
+  return { roles, states: [...new Set(strings(p.states).map(x => x.slice(0, 40)).filter(Boolean))] }
+}
+
+/** A row's marks for the declared roles. A state is kept as written, declared or not, so the pane
+ *  can flag a misspelt one; a role with no state is left out and reads as unknown. */
+function marks(raw: unknown, decl: Progress | null): Record<string, Mark> {
+  if (!decl || raw === null || typeof raw !== 'object' || Array.isArray(raw)) return {}
+  const o = raw as Record<string, unknown>
+  const out: Record<string, Mark> = {}
+  for (const role of decl.roles) {
+    const m = (o[role] ?? {}) as Record<string, unknown>
+    const state = str(m.state, 40).trim()
+    if (state) out[role] = { state, evidence: str(m.evidence, MAX_EVIDENCE).trim() }
+  }
+  return out
+}
+
 /** A worksheet from its file's text, or why it is refused. The file may hold more; only this is kept. */
 export function parseWorksheet(text: string): { sheet: Worksheet } | { error: string } {
   let raw: unknown
@@ -61,6 +84,7 @@ export function parseWorksheet(text: string): { sheet: Worksheet } | { error: st
     if (!id) return { error: 'a section has no id' }
     sections.push({ id, title: str(s.title, 200) || id, kind: s.kind === 'product' ? 'product' : 'capabilities' })
   }
+  const progress = progressDecl(o.progress)
   const rows: Row[] = []
   const seen = new Set<string>()
   for (const raw of o.rows) {
@@ -85,9 +109,10 @@ export function parseWorksheet(text: string): { sheet: Worksheet } | { error: st
       priority: choices.includes(priority) ? priority : '',
       comment: str(r.comment, MAX_COMMENT),
       proposed: { priority: str(proposed.priority, 40).toLowerCase(), reason: str(proposed.reason, MAX_REASON) },
+      progress: marks(r.progress, progress),
     })
   }
-  return { sheet: { title: str(o.title, 200) || 'Worksheet', choices, render: str(o.render, 400), sections, rows } }
+  return { sheet: { title: str(o.title, 200) || 'Worksheet', choices, render: str(o.render, 400), sections, rows, progress } }
 }
 
 /** Saved state from an older version, or a half-written one, made whole. */
@@ -101,6 +126,8 @@ export function whole(s: Partial<SheetState> | undefined): SheetState {
     pending: Array.isArray(x.pending) ? x.pending : [],
     log: Array.isArray(x.log) ? x.log : [],
     open: typeof x.open === 'string' ? x.open : null,
+    // A sheet kept by a version before progress marks has neither field; it reads as declaring none.
+    sheet: x.sheet ? { ...x.sheet, progress: x.sheet.progress ?? null, rows: x.sheet.rows.map(r => ({ ...r, progress: r.progress ?? {} })) } : null,
   }
 }
 
@@ -117,12 +144,58 @@ export function filterRows(sheet: Worksheet, f: Filter): Row[] {
     if (f.priority === UNSET ? r.priority !== '' : f.priority && r.priority !== f.priority) return false
     if (f.proposed === 'any' && !r.proposed.priority) return false
     if (f.proposed === 'differs' && (!r.proposed.priority || r.proposed.priority === r.priority)) return false
+    if (f.progress && !progressMatches(r, f.progress)) return false
     if (text) {
-      const hay = [r.id, r.title, r.role, r.comment, r.proposed.reason, ...r.references.map(x => x.id)].join(' ').toLowerCase()
+      const evidence = Object.values(r.progress).map(m => m.evidence)
+      const hay = [r.id, r.title, r.role, r.comment, r.proposed.reason, ...r.references.map(x => x.id), ...evidence].join(' ').toLowerCase()
       if (!hay.includes(text)) return false
     }
     return true
   })
+}
+
+/** A progress filter, `role=state`, `role!=state` or `role=` (unknown), taken apart; null if malformed. */
+export function parseProgressFilter(f: string): { role: string; state: string; not: boolean } | null {
+  const at = f.indexOf('=')
+  if (at <= 0) return null
+  const not = f[at - 1] === '!'
+  const role = f.slice(0, not ? at - 1 : at)
+  return role ? { role, state: f.slice(at + 1), not } : null
+}
+
+export function progressFilter(role: string, state: string, not = false): string {
+  return `${role}${not ? '!=' : '='}${state}`
+}
+
+function progressMatches(r: Row, f: string): boolean {
+  const p = parseProgressFilter(f)
+  if (!p) return true
+  const state = r.progress[p.role]?.state ?? ''
+  return p.not ? state !== p.state : state === p.state
+}
+
+/** How many rows are in each state, per role; '' counts the unknown. */
+export function progressCounts(sheet: Worksheet): Record<string, Record<string, number>> {
+  const out: Record<string, Record<string, number>> = {}
+  for (const role of sheet.progress?.roles ?? []) {
+    const tally: Record<string, number> = {}
+    for (const r of sheet.rows) {
+      const state = r.progress[role]?.state ?? ''
+      tally[state] = (tally[state] ?? 0) + 1
+    }
+    out[role] = tally
+  }
+  return out
+}
+
+/** The rows whose marks name a state the worksheet does not declare, as `row role "state"`. */
+export function undeclaredMarks(sheet: Worksheet): string[] {
+  const decl = sheet.progress
+  if (!decl) return []
+  return sheet.rows.flatMap(r => decl.roles.flatMap(role => {
+    const m = r.progress[role]
+    return m && !decl.states.includes(m.state) ? [`${r.id} ${role} "${m.state}"`] : []
+  }))
 }
 
 export type Counts = { byPriority: Record<string, number>; unset: number; proposals: number; differs: number }
@@ -258,6 +331,29 @@ export const GLYPH: Record<string, string> = { must: '●', needed: '◐', later
 
 export function glyph(priority: Priority): string {
   return GLYPH[priority] ?? '·'
+}
+
+/** The glyph for a progress state: the four agreed ones; another declared state shows its first
+ *  letter, capitalised; a state the worksheet does not declare shows `?`; unknown (no mark) a blank. */
+export const PROGRESS_GLYPH: Record<string, string> = { done: '✓', 'in-progress': '◐', 'not-started': '·', 'n/a': '–' }
+export const UNDECLARED = '?'
+
+export function progressGlyph(state: string, states: readonly string[]): string {
+  if (!state) return ' '
+  if (!states.includes(state)) return UNDECLARED
+  return PROGRESS_GLYPH[state] ?? [...state][0]!.toUpperCase()
+}
+
+/** One glyph per declared role, in the declared order, for a row's line. */
+export function progressMarks(sheet: Worksheet, r: Row): string {
+  const decl = sheet.progress
+  if (!decl) return ''
+  return decl.roles.map(role => progressGlyph(r.progress[role]?.state ?? '', decl.states)).join('')
+}
+
+/** The legend: each declared state's glyph and name, then what blank and `?` mean. */
+export function progressLegend(decl: Progress): string {
+  return [...decl.states.map(st => `${progressGlyph(st, decl.states)} ${st}`), 'blank unknown', `${UNDECLARED} not a declared state`].join('  ')
 }
 
 export function label(choice: string): string {

@@ -1,6 +1,28 @@
 import { expect, test } from 'claude-code/testing'
 
-import { applyProposals, counts, edit, EMPTY, filterRows, membershipLabel, parseConfig, parseWorksheet, patchFile, recorded, remaining, summary, whole } from './sheet'
+import {
+  applyProposals,
+  counts,
+  edit,
+  EMPTY,
+  filterRows,
+  membershipLabel,
+  NO_FILTER,
+  parseConfig,
+  parseProgressFilter,
+  parseWorksheet,
+  patchFile,
+  progressCounts,
+  progressFilter,
+  progressGlyph,
+  progressLegend,
+  progressMarks,
+  recorded,
+  remaining,
+  summary,
+  undeclaredMarks,
+  whole,
+} from './sheet'
 
 const FILE = {
   schema: 1,
@@ -68,7 +90,7 @@ test('a_worksheet_needs_schema_one_choices_sections_and_rows', () => {
 
 test('filters_narrow_by_membership_category_priority_proposal_and_text', () => {
   const s = sheet()
-  const f = { text: '', membership: '', category: '', priority: '', proposed: '' }
+  const f = { text: '', membership: '', category: '', priority: '', proposed: '', progress: '' }
   expect(filterRows(s, f).map(r => r.id)).toEqual(['xep-0030', 'xep-0280', 'xep-0449'])
   expect(filterRows(s, { ...f, membership: 'additional' }).map(r => r.id)).toEqual(['xep-0449'])
   expect(filterRows(s, { ...f, category: 'IM' }).map(r => r.id)).toEqual(['xep-0280'])
@@ -147,7 +169,7 @@ test('config_and_saved_state_are_read_leniently', () => {
   expect(parseConfig('{')).toEqual([])
   expect(parseConfig(null)).toEqual([])
   expect(whole(undefined)).toEqual(EMPTY)
-  expect(whole({ paths: ['x'] as never, filter: { text: 'q' } as never }).filter).toEqual({ text: 'q', membership: '', category: '', priority: '', proposed: '' })
+  expect(whole({ paths: ['x'] as never, filter: { text: 'q' } as never }).filter).toEqual({ text: 'q', membership: '', category: '', priority: '', proposed: '', progress: '' })
   expect(membershipLabel({ membership: 'required', categories: ['Mobile', 'IM'], levels: ['C/S', 'AC/AS'], flags: ['P'] })).toBe('Mobile C/S, IM AC/AS [P]')
   expect(membershipLabel({ membership: 'future', categories: [], levels: [], flags: [] })).toBe('suite future')
 })
@@ -166,4 +188,77 @@ test('saved_changes_leave_pending_by_content_and_the_log_keeps_one_entry_per_fie
     { id: 'r', field: 'priority', from: '', to: 'agree' },
     { id: 'r', field: 'comment', from: '', to: 'how would an agent know' },
   ])
+})
+
+// A worksheet that tracks progress for two roles; one mark is misspelt, one role is left unknown.
+const TRACKED = {
+  ...FILE,
+  progress: { roles: ['client', 'server'], states: ['done', 'in-progress', 'not-started', 'n/a', 'blocked'] },
+  rows: [
+    { ...FILE.rows[0], progress: { client: { state: 'done', evidence: 'PR #1, abc1234' }, server: { state: 'in-progress', evidence: 'PR #2, draft' } } },
+    { ...FILE.rows[1], progress: { client: { state: 'dnoe', evidence: 'PR #3' }, server: { state: 'blocked', evidence: 'issue #4' } } },
+    { ...FILE.rows[2], progress: { server: { state: 'n/a', evidence: '' }, other: { state: 'done', evidence: 'ignored' } } },
+  ],
+}
+
+function tracked() {
+  const p = parseWorksheet(JSON.stringify(TRACKED))
+  if ('error' in p) throw new Error(p.error)
+  return p.sheet
+}
+
+test('progress_is_parsed_for_declared_roles_and_absent_without_a_declaration', () => {
+  expect(sheet().progress).toBeNull()
+  expect(sheet().rows[0]?.progress).toEqual({})
+  // Marks without a declaration are not shown.
+  const undeclared = parseWorksheet(JSON.stringify({ ...TRACKED, progress: undefined }))
+  expect('sheet' in undeclared && undeclared.sheet.rows[0]?.progress).toEqual({})
+  expect(parseWorksheet(JSON.stringify({ ...TRACKED, progress: { roles: [], states: ['done'] } }))).toMatchObject({ sheet: { progress: null } })
+  const s = tracked()
+  expect(s.progress).toEqual({ roles: ['client', 'server'], states: ['done', 'in-progress', 'not-started', 'n/a', 'blocked'] })
+  expect(s.rows[0]?.progress).toEqual({ client: { state: 'done', evidence: 'PR #1, abc1234' }, server: { state: 'in-progress', evidence: 'PR #2, draft' } })
+  expect(s.rows[1]?.progress.client).toEqual({ state: 'dnoe', evidence: 'PR #3' })
+  expect(s.rows[2]?.progress).toEqual({ server: { state: 'n/a', evidence: '' } })
+})
+
+test('glyphs_mark_each_role_with_fallbacks_for_other_and_undeclared_states', () => {
+  const s = tracked()
+  const states = s.progress!.states
+  expect(['done', 'in-progress', 'not-started', 'n/a', 'blocked', 'dnoe', ''].map(st => progressGlyph(st, states))).toEqual(['✓', '◐', '·', '–', 'B', '?', ' '])
+  expect(s.rows.map(r => progressMarks(s, r))).toEqual(['✓◐', '?B', ' –'])
+  expect(progressMarks(sheet(), sheet().rows[0]!)).toBe('')
+  expect(progressLegend(s.progress!)).toBe('✓ done  ◐ in-progress  · not-started  – n/a  B blocked  blank unknown  ? not a declared state')
+  expect(undeclaredMarks(s)).toEqual(['xep-0280 client "dnoe"'])
+  expect(progressCounts(s)).toEqual({ client: { done: 1, dnoe: 1, '': 1 }, server: { 'in-progress': 1, blocked: 1, 'n/a': 1 } })
+})
+
+test('the_progress_filter_keeps_a_state_its_complement_or_the_unknown', () => {
+  const s = tracked()
+  const ids = (progress: string) => filterRows(s, { ...NO_FILTER, progress }).map(r => r.id)
+  expect(ids(progressFilter('server', 'done', true))).toEqual(['xep-0030', 'xep-0280', 'xep-0449'])
+  expect(ids(progressFilter('client', 'done', true))).toEqual(['xep-0280', 'xep-0449'])
+  expect(ids(progressFilter('client', 'done'))).toEqual(['xep-0030'])
+  expect(ids(progressFilter('client', ''))).toEqual(['xep-0449'])
+  expect(ids('nonsense')).toHaveLength(3)
+  expect(parseProgressFilter('server!=done')).toEqual({ role: 'server', state: 'done', not: true })
+  expect(filterRows(s, { ...NO_FILTER, text: 'abc1234' }).map(r => r.id)).toEqual(['xep-0030'])
+})
+
+test('saving_and_proposing_leave_the_progress_block_untouched', () => {
+  const data = JSON.parse(JSON.stringify(TRACKED))
+  patchFile(data, [
+    { id: 'xep-0280', field: 'priority', from: 'later', to: 'must' },
+    { id: 'xep-0280', field: 'comment', from: '', to: 'now' },
+  ])
+  applyProposals(data, [{ id: 'xep-0280', priority: 'must', reason: 'r' }], ['must'])
+  expect(data.progress).toEqual(TRACKED.progress)
+  expect(data.rows.map((r: { progress: unknown }) => r.progress)).toEqual(TRACKED.rows.map(r => r.progress))
+})
+
+test('a_sheet_saved_before_progress_reads_as_declaring_none', () => {
+  const old = { ...sheet(), progress: undefined, rows: sheet().rows.map(({ progress: _, ...r }) => r) }
+  const s = whole({ sheet: old as never })
+  expect(s.sheet?.progress).toBeNull()
+  expect(s.sheet?.rows.every(r => JSON.stringify(r.progress) === '{}')).toBe(true)
+  expect(s.filter.progress).toBe('')
 })
