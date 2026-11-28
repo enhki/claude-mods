@@ -17,9 +17,11 @@ Install it with `/plugin install worksheet --marketplace enhki/claude-mods`.
 - **Progress marks** (optional, read-only): a worksheet that declares
   `progress: { roles, states }` shows one glyph per role on each row, from the
   row's `progress: { <role>: { state, evidence } }`: done `✓`, in-progress
-  `◐`, not-started `·`, n/a `–`, unknown (no mark) blank. Another declared
-  state shows its first letter, capitalised; a state the worksheet does not
-  declare shows `?`, and a note above the rows names those marks. A legend and
+  `◔`, not-started `∘`, n/a `–`, unknown (no mark) blank; none of them is a
+  priority glyph. Another declared state shows the first of its letters,
+  capitalised, that no earlier state took (`blocked` `B`, `built` `U`); a
+  state the worksheet does not declare shows `?`, and a note above the rows
+  names those marks. A role name containing `=` or ending in `!` is ignored. A legend and
   a count per role sit under the title, the open row lists each role's state
   and evidence, and a filter per role keeps one state, rows not in the first
   declared state (for example "server: not done"), or the unknown. Agents

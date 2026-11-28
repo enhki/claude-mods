@@ -45,7 +45,8 @@ function suite(raw: unknown): Suite {
 /** The worksheet's progress declaration; null when absent or naming no roles. */
 function progressDecl(raw: unknown): Progress | null {
   const p = (raw ?? {}) as Record<string, unknown>
-  const roles = [...new Set(strings(p.roles).map(r => r.slice(0, 40)).filter(Boolean))]
+  // A role the progress filter could not spell back (`role=state`, `role!=state`) is not taken.
+  const roles = [...new Set(strings(p.roles).map(r => r.slice(0, 40)).filter(r => r && !r.includes('=') && !r.endsWith('!')))]
   if (roles.length === 0) return null
   return { roles, states: [...new Set(strings(p.states).map(x => x.slice(0, 40)).filter(Boolean))] }
 }
@@ -127,7 +128,7 @@ export function whole(s: Partial<SheetState> | undefined): SheetState {
     log: Array.isArray(x.log) ? x.log : [],
     open: typeof x.open === 'string' ? x.open : null,
     // A sheet kept by a version before progress marks has neither field; it reads as declaring none.
-    sheet: x.sheet ? { ...x.sheet, progress: x.sheet.progress ?? null, rows: x.sheet.rows.map(r => ({ ...r, progress: r.progress ?? {} })) } : null,
+    sheet: x.sheet ? { ...x.sheet, progress: x.sheet.progress ?? null, rows: (x.sheet.rows ?? []).map(r => ({ ...r, progress: r.progress ?? {} })) } : null,
   }
 }
 
@@ -328,20 +329,45 @@ export function isWorksheetName(name: string): boolean {
 }
 
 export const GLYPH: Record<string, string> = { must: '●', needed: '◐', later: '○', no: '✕' }
+/** The glyph of a row with no priority, or a priority no glyph is set for. */
+export const UNSET_GLYPH = '·'
 
 export function glyph(priority: Priority): string {
-  return GLYPH[priority] ?? '·'
+  return GLYPH[priority] ?? UNSET_GLYPH
 }
 
-/** The glyph for a progress state: the four agreed ones; another declared state shows its first
- *  letter, capitalised; a state the worksheet does not declare shows `?`; unknown (no mark) a blank. */
-export const PROGRESS_GLYPH: Record<string, string> = { done: '✓', 'in-progress': '◐', 'not-started': '·', 'n/a': '–' }
+/** The glyph for a progress state: the four agreed ones, chosen apart from the priority glyphs so
+ *  a row's first glyph and its marks never read alike; a state the worksheet does not declare shows
+ *  `?`; unknown (no mark) a blank. */
+export const PROGRESS_GLYPH: Record<string, string> = { done: '✓', 'in-progress': '◔', 'not-started': '∘', 'n/a': '–' }
 export const UNDECLARED = '?'
+
+/** Each declared state's glyph. A state without an agreed glyph takes the first of its letters,
+ *  capitalised, that no earlier state took, so `blocked` and `built` read `B` and `U`. */
+export function stateGlyphs(states: readonly string[]): Record<string, string> {
+  const out: Record<string, string> = {}
+  const taken = new Set<string>([UNDECLARED])
+  for (const st of states) {
+    const fixed = PROGRESS_GLYPH[st]
+    if (fixed) {
+      out[st] = fixed
+      taken.add(fixed)
+    }
+  }
+  for (const st of states) {
+    if (out[st]) continue
+    const letters = [...st.toUpperCase()].filter(ch => /\p{L}|\p{N}/u.test(ch))
+    const pick = letters.find(ch => !taken.has(ch)) ?? letters[0] ?? '*'
+    out[st] = pick
+    taken.add(pick)
+  }
+  return out
+}
 
 export function progressGlyph(state: string, states: readonly string[]): string {
   if (!state) return ' '
   if (!states.includes(state)) return UNDECLARED
-  return PROGRESS_GLYPH[state] ?? [...state][0]!.toUpperCase()
+  return stateGlyphs(states)[state]!
 }
 
 /** One glyph per declared role, in the declared order, for a row's line. */

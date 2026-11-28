@@ -13,6 +13,11 @@ import {
   parseWorksheet,
   patchFile,
   progressCounts,
+  GLYPH,
+  PROGRESS_GLYPH,
+  stateGlyphs,
+  UNDECLARED,
+  UNSET_GLYPH,
   progressFilter,
   progressGlyph,
   progressLegend,
@@ -224,10 +229,10 @@ test('progress_is_parsed_for_declared_roles_and_absent_without_a_declaration', (
 test('glyphs_mark_each_role_with_fallbacks_for_other_and_undeclared_states', () => {
   const s = tracked()
   const states = s.progress!.states
-  expect(['done', 'in-progress', 'not-started', 'n/a', 'blocked', 'dnoe', ''].map(st => progressGlyph(st, states))).toEqual(['✓', '◐', '·', '–', 'B', '?', ' '])
-  expect(s.rows.map(r => progressMarks(s, r))).toEqual(['✓◐', '?B', ' –'])
+  expect(['done', 'in-progress', 'not-started', 'n/a', 'blocked', 'dnoe', ''].map(st => progressGlyph(st, states))).toEqual(['✓', '◔', '∘', '–', 'B', '?', ' '])
+  expect(s.rows.map(r => progressMarks(s, r))).toEqual(['✓◔', '?B', ' –'])
   expect(progressMarks(sheet(), sheet().rows[0]!)).toBe('')
-  expect(progressLegend(s.progress!)).toBe('✓ done  ◐ in-progress  · not-started  – n/a  B blocked  blank unknown  ? not a declared state')
+  expect(progressLegend(s.progress!)).toBe('✓ done  ◔ in-progress  ∘ not-started  – n/a  B blocked  blank unknown  ? not a declared state')
   expect(undeclaredMarks(s)).toEqual(['xep-0280 client "dnoe"'])
   expect(progressCounts(s)).toEqual({ client: { done: 1, dnoe: 1, '': 1 }, server: { 'in-progress': 1, blocked: 1, 'n/a': 1 } })
 })
@@ -261,4 +266,27 @@ test('a_sheet_saved_before_progress_reads_as_declaring_none', () => {
   expect(s.sheet?.progress).toBeNull()
   expect(s.sheet?.rows.every(r => JSON.stringify(r.progress) === '{}')).toBe(true)
   expect(s.filter.progress).toBe('')
+})
+
+test('progress_glyphs_never_repeat_a_priority_glyph', () => {
+  const priority = new Set([...Object.values(GLYPH), UNSET_GLYPH])
+  const progress = [...Object.values(PROGRESS_GLYPH), UNDECLARED]
+  expect(progress.filter(g => priority.has(g))).toEqual([])
+  expect(new Set(progress).size).toBe(progress.length)
+})
+
+test('custom_states_sharing_a_first_letter_get_glyphs_apart', () => {
+  expect(stateGlyphs(['done', 'blocked', 'built', 'b'])).toEqual({ done: '✓', blocked: 'B', built: 'U', b: 'B' })
+  expect(stateGlyphs(['blocked', 'built', 'bul'])).toEqual({ blocked: 'B', built: 'U', bul: 'L' })
+})
+
+test('role_names_the_filter_cannot_spell_are_not_taken', () => {
+  const p = parseWorksheet(JSON.stringify({ ...TRACKED, progress: { ...TRACKED.progress, roles: ['client', 'a=b', 'c!', 'server'] } }))
+  expect('sheet' in p && p.sheet.progress?.roles).toEqual(['client', 'server'])
+})
+
+test('a_kept_sheet_without_rows_is_made_whole', () => {
+  const s = whole({ sheet: { title: 't', choices: ['must'], render: '', sections: [] } as never })
+  expect(s.sheet?.rows).toEqual([])
+  expect(s.sheet?.progress).toBeNull()
 })

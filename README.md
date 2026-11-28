@@ -211,8 +211,8 @@ press **Send changes**, or by themselves a few seconds after each save when
 - **Progress marks** (optional, read-only): a worksheet declaring
   `progress: { roles, states }` shows one glyph per role on each row from the
   row's `progress: { <role>: { state, evidence } }`: done `✓`, in-progress
-  `◐`, not-started `·`, n/a `–`, unknown blank; another declared state shows
-  its capitalised first letter, an undeclared one `?` with a note naming it.
+  `◔`, not-started `∘`, n/a `–`, unknown blank; another declared state shows
+  its first capitalised letter no earlier state took, an undeclared one `?` with a note naming it.
   A legend and per-role counts sit under the title, and the open row lists
   each role's state and evidence. The pane never writes the field; saving a
   priority or comment leaves it untouched. Without `progress`, nothing changes.
